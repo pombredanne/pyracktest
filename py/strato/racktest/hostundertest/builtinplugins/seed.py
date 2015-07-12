@@ -13,13 +13,13 @@ class Seed:
     def __init__(self, host):
         self._host = host
 
-    def runCode(self, code, takeSitePackages=False, outputTimeout=None):
+    def runCode(self, code, takeSitePackages=False, outputTimeout=None, excludePackages=None):
         """
         make sure to assign to 'result' in order for the result to come back!
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
         """
         unique = self._unique()
-        self._install(code, unique, takeSitePackages)
+        self._install(code, unique, takeSitePackages,  excludePackages)
         output = self._run(unique, outputTimeout=outputTimeout)
         result = self._downloadResult(unique)
         return result, output
@@ -31,23 +31,24 @@ class Seed:
             takeSitePackages = True
             kwargs = dict(kwargs)
             del kwargs['takeSitePackages']
+        excludePackages = kwargs.pop('excludePackages', None)
         outputTimeout = None
         if 'outputTimeout' in kwargs:
             outputTimeout = kwargs['outputTimeout']
             del kwargs['outputTimeout']
         unique = self._unique()
-        self._installCallable(unique, callable, args, kwargs, takeSitePackages)
+        self._installCallable(unique, callable, args, kwargs, takeSitePackages, excludePackages)
         output = self._run(unique, outputTimeout=outputTimeout)
         result = self._downloadResult(unique)
         return result, output
 
-    def forkCode(self, code, takeSitePackages=False):
+    def forkCode(self, code, takeSitePackages=False, excludePackages=None):
         """
         make sure to assign to 'result' in order for the result to come back!
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
         """
         unique = self._unique()
-        self._install(code, unique, takeSitePackages)
+        self._install(code, unique, takeSitePackages, excludePackages)
         return _Forked(self._host, unique)
 
     def forkCallable(self, callable, *args, **kwargs):
@@ -57,11 +58,12 @@ class Seed:
             takeSitePackages = True
             kwargs = dict(kwargs)
             del kwargs['takeSitePackages']
+        excludePackages = kwargs.pop('excludePackages', None)
         unique = self._unique()
-        self._installCallable(unique, callable, args, kwargs, takeSitePackages)
+        self._installCallable(unique, callable, args, kwargs, takeSitePackages, excludePackages)
         return _Forked(self._host, unique)
 
-    def _installCallable(self, unique, callable, args, kwargs, takeSitePackages):
+    def _installCallable(self, unique, callable, args, kwargs, takeSitePackages, excludePackages):
         argsPickle = "/tmp/args%s.pickle" % unique
         code = (
             "import %(module)s\n"
@@ -74,33 +76,36 @@ class Seed:
                 callable=callable.__name__)
         argsContents = cPickle.dumps((args, kwargs), cPickle.HIGHEST_PROTOCOL)
         self._host.ssh.ftp.putContents(argsPickle, argsContents)
-        self._install(code, unique, takeSitePackages)
+        self._install(code, unique, takeSitePackages, excludePackages)
 
-    def _install(self, code, unique, takeSitePackages):
+    def _install(self, code, unique, takeSitePackages, excludePackages):
         outputPickle = "/tmp/result%s.pickle" % unique
         packingCode = "result = None\n" + code + "\n" + (
             "import cPickle\n"
             "with open('%(outputPickle)s', 'wb') as f:\n"
             " cPickle.dump(result, f, cPickle.HIGHEST_PROTOCOL)\n") % dict(outputPickle=outputPickle)
-        packed = self._pack(packingCode, takeSitePackages)
+        packed = self._pack(packingCode, takeSitePackages, excludePackages)
         eggFilename = "/tmp/seed%s.egg" % unique
         self._host.ssh.ftp.putContents(eggFilename, packed)
 
     def _unique(self):
         return "%09d" % random.randint(0, 1000 * 1000 * 1000)
 
-    def _pack(self, code, takeSitePackages):
+    def _pack(self, code, takeSitePackages, excludePackages):
         codeDir = tempfile.mkdtemp(suffix="_eggDir")
         try:
             codeFile = os.path.join(codeDir, "seedentrypoint.py")
             with open(codeFile, "w") as f:
                 f.write(code)
             eggFile = tempfile.NamedTemporaryFile(suffix=".egg")
+            excludePackages = (['--excludeModule'] + [package for package in excludePackages]) \
+                if excludePackages is not None else []
             try:
                 subprocess.check_output([
                     "python", "-m", "upseto.packegg", "--entryPoint", codeFile,
                     "--output", eggFile.name, "--joinPythonNamespaces"] +
-                    (['--takeSitePackages'] if takeSitePackages else []),
+                    (['--takeSitePackages'] if takeSitePackages else []) +
+                    (excludePackages),
                     stderr=subprocess.STDOUT, close_fds=True, env=dict(
                         os.environ, PYTHONPATH=codeDir + ":" + os.environ['PYTHONPATH']))
                 return eggFile.read()
