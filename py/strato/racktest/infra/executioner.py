@@ -76,11 +76,20 @@ class Executioner:
         time.sleep(2)
         self._killSelfHard()
 
+    def _sendMeASignal(self, signalNr):
+        signalNrToName = dict([(number, name) for (name, number) in signal.__dict__.items()
+                               if 'SIG' in name])
+        signalName = signalNrToName[signalNr]
+        myPID = os.getpid()
+        logging.info("Sending %(signalName)s to self (PID: %(myPID)s)",
+                     dict(signalName=signalName, myPID=myPID))
+        os.kill(myPID, signalNr)
+
     def _killSelf(self):
-        os.kill(os.getpid(), signal.SIGTERM)
+        self._sendMeASignal(signal.SIGTERM)
 
     def _killSelfHard(self):
-        os.kill(os.getpid(), signal.SIGKILL)
+        self._sendMeASignal(signal.SIGKILL)
 
     def _filename(self):
         filename = sys.modules[self._test.__class__.__module__].__file__
