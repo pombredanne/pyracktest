@@ -1,5 +1,6 @@
 from strato.racktest.infra.suite import *
 from example_seeds import addition
+from example_seeds import customlogging
 import time
 
 SIGNALLED_CALLABLE_CODE = """
@@ -75,3 +76,16 @@ class Test:
             else:
                 break
         TS_ASSERT_EQUALS(forked.poll(), True)
+
+        logFilePath = "/tmp/2_seed_configureLogAndThrow"
+        messageToLookFor = "this message is expected to be traced in case callable throws"
+        forked = host.it.seed.forkCallable(customlogging.configureLogAndThrow, logFilePath, messageToLookFor)
+        for i in xrange(10):
+            if forked.poll() is None:
+                time.sleep(1)
+            else:
+                break
+        TS_ASSERT_EQUALS(forked.poll(), False)
+        time.sleep(1)
+        output = host.it.ssh.ftp.getContents(logFilePath).strip()
+        TS_ASSERT(messageToLookFor in output)

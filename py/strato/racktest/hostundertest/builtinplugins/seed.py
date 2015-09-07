@@ -8,6 +8,19 @@ import os
 import logging
 import time
 
+_CALLABLE_WRAPPER_TEMPLATE = """
+import %(module)s
+import cPickle
+import logging
+with open('%(argsPickle)s', 'rb') as f:
+    args, kwargs = cPickle.load(f)
+try:
+    result = %(module)s.%(callable)s(*args, **kwargs)
+except:
+    logging.exception("'%(callable)s' failed on exception")
+    raise
+"""
+
 
 class Seed:
     def __init__(self, host):
@@ -65,15 +78,9 @@ class Seed:
 
     def _installCallable(self, unique, callable, args, kwargs, takeSitePackages, excludePackages):
         argsPickle = "/tmp/args%s.pickle" % unique
-        code = (
-            "import %(module)s\n"
-            "import cPickle\n"
-            "with open('%(argsPickle)s', 'rb') as f:\n"
-            " args, kwargs = cPickle.load(f)\n"
-            "result = %(module)s.%(callable)s(*args, **kwargs)\n") % dict(
-                module=callable.__module__,
-                argsPickle=argsPickle,
-                callable=callable.__name__)
+        code = _CALLABLE_WRAPPER_TEMPLATE % dict(module=callable.__module__,
+                                                 argsPickle=argsPickle,
+                                                 callable=callable.__name__)
         argsContents = cPickle.dumps((args, kwargs), cPickle.HIGHEST_PROTOCOL)
         self._host.ssh.ftp.putContents(argsPickle, argsContents)
         self._install(code, unique, takeSitePackages, excludePackages)
