@@ -53,8 +53,9 @@ class RackAttackAllocation:
         return result
 
     def _rackattackAllocationInfo(self):
+        # Super nice
         nice = 0
-        nice = max(nice, float(os.environ.get('RACKTEST_MINIMUM_NICE_FOR_RACKATTACK', 0)))
+        #nice = max(nice, float(os.environ.get('RACKTEST_MINIMUM_NICE_FOR_RACKATTACK', 0)))
         return api.AllocationInfo(user=config.USER, purpose="racktest", nice=nice)
 
     def runOnEveryHost(self, callback, description):
