@@ -15,7 +15,7 @@ class Seed:
         self._host = host
 
     def runCode(self, code, takeSitePackages=False, outputTimeout=None,
-                excludePackages=None, joinPythonNamespaces=False):
+                excludePackages=None, joinPythonNamespaces=True):
         """
         make sure to assign to 'result' in order for the result to come back!
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
@@ -51,13 +51,13 @@ class Seed:
         result = self._downloadResult(unique)
         return result, output
 
-    def forkCode(self, code, takeSitePackages=False, excludePackages=None):
+    def forkCode(self, code, takeSitePackages=False, excludePackages=None, joinPythonNamespaces=True):
         """
         make sure to assign to 'result' in order for the result to come back!
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
         """
         unique = self._unique()
-        self._install(code, unique, takeSitePackages, excludePackages)
+        self._install(code, unique, takeSitePackages, excludePackages, joinPythonNamespaces)
         return _Forked(self._host, unique)
 
     def forkCallable(self, callable, *args, **kwargs):
