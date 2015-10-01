@@ -130,3 +130,34 @@ def fileCacheDir():
 
 
 cacheregistry.register('file', lambda: FileCache(fileCacheDir()))
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='File SeedCache controller')
+    parser.add_argument('--root', required=False, default=fileCacheDir())
+    parser.add_argument('--verbose', action='store_true', default=False)
+    commandGroup = parser.add_mutually_exclusive_group()
+    commandGroup.add_argument('--clear', action='store_true', default=False)
+    commandGroup.add_argument('--display', action='store_true', default=True)
+    commandGroup.add_argument('--fix-locked', dest='fix_locked', action='store_true', default=False)
+
+    args = parser.parse_args()
+    cache = FileCache(args.root)
+    if args.clear:
+        cache.clean()
+        sys.exit(0)
+    if args.fix_locked:
+        for keyName, seedArgs, deps, lockFile in cache.traverse():
+            if lockFile.is_locked() and not cache._isLockingProcessAliveForLockFile(lockFile):
+                cache.removeKey(keyName)
+        sys.exit(0)
+    if args.display:
+        for keyName, seedArgs, deps, lockFile in cache.traverse():
+            output = sys.stdout if not lockFile.is_locked() else sys.stderr
+            output.write('CachedSeed: %(module)s:%(method)s - locked: %(locked)s status: %(status)s\n' %
+                         dict(module=seedArgs[0],
+                              method=seedArgs[1],
+                              locked=lockFile.is_locked(),
+                              status='valid' if cache._validateDependencies(keyName) else 'outdated'))
+            if args.verbose:
+                print 'Dependencies: %s' % deps
