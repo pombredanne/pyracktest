@@ -75,3 +75,6 @@ class Test:
             else:
                 break
         TS_ASSERT_EQUALS(forked.poll(), True)
+        forked = host.it.seed.forkCallable(addition.addition, 1, second=2, takeSitePackages=True)
+        TS_ASSERT_PREDICATE_TIMEOUT(forked.poll, TS_timeout=4)
+        TS_ASSERT_EQUALS(forked.result(), 3)
