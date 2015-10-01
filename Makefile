@@ -14,3 +14,6 @@ devphystest:
 
 check_convention:
 	pep8 py test* example* --max-line-length=109
+
+unittest:
+	UPSETO_JOIN_PYTHON_NAMESPACES=Yes PYTHONPATH=py:. python py/strato/tests/runner.py
