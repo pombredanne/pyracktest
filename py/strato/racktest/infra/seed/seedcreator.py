@@ -8,11 +8,12 @@ import shutil
 class SeedCreator(object):
     ENTRYPOINT_NAME = 'seedentrypoint.py'
 
-    def __init__(self, code, generateDependencies=False, takeSitePackages=False, excludePackages=None):
+    def __init__(self, code, generateDependencies=False, takeSitePackages=False, excludePackages=None, joinPythonNamespaces=True):
         self._takeSitePackages = takeSitePackages
         self._excludePackages = excludePackages
         self._generateDependencies = generateDependencies
         self._code = code
+        self._joinPythonNamespaces = joinPythonNamespaces
 
     def _shouldManifestDependency(self, depedency):
         return os.path.basename(depedency) != self.ENTRYPOINT_NAME
@@ -50,13 +51,15 @@ class SeedCreator(object):
             depedenciesGeneratorPart = (["--createDeps", depsFile.name])\
                 if self._generateDependencies else []
             try:
-                subprocess.check_output([
-                    "python", "-m", "upseto.packegg", "--entryPoint", codeFile,
-                    "--output", eggFile.name, "--joinPythonNamespaces"] +
-                    (['--takeSitePackages'] if self._takeSitePackages else []) +
-                    (excludePackages) + (depedenciesGeneratorPart),
-                    stderr=subprocess.STDOUT, close_fds=True, env=dict(
-                        os.environ, PYTHONPATH=codeDir + ":" + os.environ['PYTHONPATH']))
+                cmd = ["python", "-m", "upseto.packegg", "--entryPoint", codeFile,
+                       "--output", eggFile.name] + \
+                      (["--joinPythonNamespaces"] if joinPythonNamespaces else []) + \
+                      (['--takeSitePackages'] if takeSitePackages else []) + \
+                      (excludePackages) + (depedenciesGeneratorPart)
+                env = dict(os.environ, PYTHONPATH=codeDir +
+                           (":%s" % callableRootPath if callableRootPath is not None else "") +
+                           (":" + os.environ['PYTHONPATH']))
+                subprocess.check_output(cmd, stderr=subprocess.STDOUT, close_fds=True, env=env)
                 manifest = self._generateManifest(eggFile, depsFile)
                 return manifest
             except subprocess.CalledProcessError as e:
