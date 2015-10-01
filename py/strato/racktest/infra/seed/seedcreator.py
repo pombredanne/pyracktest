@@ -8,10 +8,13 @@ import shutil
 class SeedCreator(object):
     ENTRYPOINT_NAME = 'seedentrypoint.py'
 
-    def __init__(self, code, generateDependencies=False, takeSitePackages=False, excludePackages=None):
+    def __init__(self, code, generateDependencies=False, takeSitePackages=False, excludePackages=None,
+                 joinPythonNamespaces=True, callableRootPath=None):
         self._takeSitePackages = takeSitePackages
         self._excludePackages = excludePackages
         self._generateDependencies = generateDependencies
+        self._joinPythonNamespaces = joinPythonNamespaces
+        self._callableRootPath = callableRootPath
         self._code = code
 
     def _shouldManifestDependency(self, depedency):
@@ -47,16 +50,18 @@ class SeedCreator(object):
             depsFile = tempfile.NamedTemporaryFile(suffix=".deps") if self._generateDependencies else None
             excludePackages = (['--excludeModule'] + [package for package in self._excludePackages]) \
                 if self._excludePackages is not None else []
-            depedenciesGeneratorPart = (["--createDeps", depsFile.name])\
+            dependenciesGeneratorPart = (["--createDeps", depsFile.name])\
                 if self._generateDependencies else []
             try:
-                subprocess.check_output([
-                    "python", "-m", "upseto.packegg", "--entryPoint", codeFile,
-                    "--output", eggFile.name, "--joinPythonNamespaces"] +
-                    (['--takeSitePackages'] if self._takeSitePackages else []) +
-                    (excludePackages) + (depedenciesGeneratorPart),
-                    stderr=subprocess.STDOUT, close_fds=True, env=dict(
-                        os.environ, PYTHONPATH=codeDir + ":" + os.environ['PYTHONPATH']))
+                cmd = ["python", "-m", "upseto.packegg", "--entryPoint", codeFile,
+                       "--output", eggFile.name] + \
+                      (["--joinPythonNamespaces"] if self._joinPythonNamespaces else []) + \
+                      (['--takeSitePackages'] if self._takeSitePackages else []) + \
+                      (excludePackages) + (dependenciesGeneratorPart)
+                env = dict(os.environ, PYTHONPATH=codeDir +
+                           (":%s" % self._callableRootPath if self._callableRootPath is not None else "") +
+                           (":" + os.environ['PYTHONPATH']))
+                subprocess.check_output(cmd, stderr=subprocess.STDOUT, close_fds=True, env=env)
                 manifest = self._generateManifest(eggFile, depsFile)
                 return manifest
             except subprocess.CalledProcessError as e:
