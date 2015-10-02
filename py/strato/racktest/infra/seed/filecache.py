@@ -9,6 +9,7 @@ import cacheregistry
 import argparse
 import sys
 import glob
+import re
 
 
 class FileCache(object):
@@ -40,7 +41,18 @@ class FileCache(object):
     def lock(self, key):
         sanitizedKey = self._sanitizeKeyForFileName(key)
         lock = lockfile.LockFile(self._lockFileName(sanitizedKey))
-        lock.acquire(timeout=60)
+        while True:
+            try:
+                lock.acquire(timeout=60)
+                break
+            except lockfile.LockTimeout:
+                logging.warning('Lock timed out for key %(key)s try to heal cache', dict(key=key))
+                if self._isLockingProcessAliveForLockFile(lock):
+                    raise
+                logging.warning('Cache is locked by dead process.'
+                                'unlock and drop key %(key)s', dict(key=key))
+                self.removeKey(sanitizedKey)
+                continue
         try:
             yield
         finally:
@@ -61,6 +73,31 @@ class FileCache(object):
                               dict(depPath=depPath, current=fileMtime, registered=mTime))
                 return False
         return True
+
+    def _isLockingProcessAliveForLockFile(self, lock):
+        lockFileStat = os.stat(lock.lock_file)
+
+        def _isSameUniqueLock(uniqueFile):
+            fullPath = os.path.join(self._cacheDir, uniqueFile)
+            return lockFileStat.st_ino == os.stat(fullPath).st_ino
+
+        def _getPidFromUniqueFile(uniqueLockFile):
+            return uniqueLockFile.split('.')[1]
+
+        def _existsPid(pid):
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return False
+            else:
+                return True
+
+        uniqueLockFiles = [f for f in os.listdir(self._cacheDir)
+                           if not (f.endswith('.code') or f.endswith('.deps') or f.endswith('.lock'))]
+        for uniqueLockFile in uniqueLockFiles:
+            if _isSameUniqueLock(uniqueLockFile):
+                pid = _getPidFromUniqueFile(uniqueLockFile)
+                return _existsPid(int(pid))
 
     def _storeDependencies(self, key, deps):
         path = self._depsFileName(key)
