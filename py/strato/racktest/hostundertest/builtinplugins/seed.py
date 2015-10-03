@@ -24,19 +24,17 @@ class Seed:
         result = self._downloadResult(unique)
         return result, output
 
+    def _initCallable(self, callable, *args, **kwargs):
+        takeSitePackages = kwargs.pop('takeSitePackages', False)
+        excludePackages = kwargs.pop('excludePackages', None)
+        unique = self._unique()
+        self._installCallable(unique, callable, args, kwargs, takeSitePackages, excludePackages)
+        return unique
+
     def runCallable(self, callable, *args, **kwargs):
         "Currently, only works on global functions. Also accepts 'takeSitePackages' kwarg"
-        takeSitePackages = False
-        if 'takeSitePackages' in kwargs:
-            takeSitePackages = True
-            kwargs = dict(kwargs)
-            del kwargs['takeSitePackages']
-        outputTimeout = None
-        if 'outputTimeout' in kwargs:
-            outputTimeout = kwargs['outputTimeout']
-            del kwargs['outputTimeout']
-        unique = self._unique()
-        self._installCallable(unique, callable, args, kwargs, takeSitePackages)
+        outputTimeout = kwargs.pop('outputTimeout', None)
+        unique = self._initCallable(callable, *args, **kwargs)
         output = self._run(unique, outputTimeout=outputTimeout)
         result = self._downloadResult(unique)
         return result, output
@@ -52,16 +50,21 @@ class Seed:
 
     def forkCallable(self, callable, *args, **kwargs):
         "Currently, only works on global functions. Also accepts 'takeSitePackages' kwarg"
-        takeSitePackages = False
-        if 'takeSitePackages' in kwargs:
-            takeSitePackages = True
-            kwargs = dict(kwargs)
-            del kwargs['takeSitePackages']
-        unique = self._unique()
-        self._installCallable(unique, callable, args, kwargs, takeSitePackages)
+        unique = self._initCallable(callable, *args, **kwargs)
         return _Forked(self._host, unique)
 
-    def _installCallable(self, unique, callable, args, kwargs, takeSitePackages):
+    def offlineCallable(self, callable, *args, **kwargs):
+        """
+        Currently, only works on global functions. Also accepts 'takeSitePackages' kwarg
+        This is like forkCallable, but keeps all ssh connections to host down after running the
+        code, and in between actions. For every action, ssh is reconnected, and closed after
+        """
+        self._host.connect()
+        unique = self._initCallable(callable, *args, **kwargs)
+        self._host.close()
+        return _OfflineForked(self._host, unique)
+
+    def _installCallable(self, unique, callable, args, kwargs, takeSitePackages, excludePackages):
         argsPickle = "/tmp/args%s.pickle" % unique
         code = (
             "import %(module)s\n"
@@ -123,7 +126,7 @@ class Seed:
         return cPickle.loads(self._host.ssh.ftp.getContents("/tmp/result%s.pickle" % unique))
 
 
-class _Forked:
+class _Forked(object):
     def __init__(self, host, unique):
         self._host = host
         self._unique = unique
@@ -160,6 +163,36 @@ class _Forked:
         if signalNameOrNumber is None:
             signalNameOrNumber = 'TERM'
         self._host.ssh.run.script("kill -%s %s" % (str(signalNameOrNumber), self._pid))
+
+
+class _OfflineForked(_Forked):
+    def __init__(self, host, unique):
+        host.connect()
+        super(_OfflineForked, self).__init__(host, unique)
+        self._host.close()
+
+    def poll(self):
+        self._host.connect()
+        res = super(_OfflineForked, self).poll()
+        self._host.close()
+        return res
+
+    def result(self):
+        self._host.connect()
+        res = super(_OfflineForked, self).result()
+        self._host.close()
+        return res
+
+    def output(self):
+        self._host.connect()
+        res = super(_OfflineForked, self).output()
+        self._host.close()
+        return res
+
+    def kill(self):
+        self._host.connect()
+        super(_OfflineForked, self).kill()
+        self._host.close()
 
 
 plugins.register('seed', Seed)
