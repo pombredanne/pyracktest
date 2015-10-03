@@ -105,6 +105,21 @@ class Seed:
         callableFilePath = inspect.getfile(callable) if not inspect.isbuiltin(callable) else '__builtin__' 
         return callableFilePath + ":" + callable.__name__
 
+    def offlineCallable(self, callable, *args, **kwargs):
+        """
+        Currently, only works on global functions. Also accepts 'takeSitePackages' kwarg
+        This is like forkCallable, but keeps all ssh connections to host down after running the
+        code, and in between actions. For every action, ssh is reconnected, and closed after
+        """
+        self._host.connect()
+        kwargs = dict(kwargs)
+        kwargs.pop('outputTimeout', None)
+        unique = self._unique()
+        seedGenerator = self._prepareCallable(callable, unique, *args, **kwargs)
+        invocation.executeInBackground(self._host, seedGenerator, unique, hasInput=True)
+        self._host.close()
+        return _OfflineForked(self._host, unique)
+
     def _unique(self):
         return "%09d" % random.randint(0, 1000 * 1000 * 1000)
 
@@ -142,6 +157,36 @@ class _Forked:
         if signalNameOrNumber is None:
             signalNameOrNumber = 'TERM'
         self._host.ssh.run.script("kill -%s %s" % (str(signalNameOrNumber), self._pid))
+
+
+class _OfflineForked(_Forked):
+    def __init__(self, host, unique):
+        host.connect()
+        super(_OfflineForked, self).__init__(host, unique)
+        self._host.close()
+
+    def poll(self):
+        self._host.connect()
+        res = super(_OfflineForked, self).poll()
+        self._host.close()
+        return res
+
+    def result(self):
+        self._host.connect()
+        res = super(_OfflineForked, self).result()
+        self._host.close()
+        return res
+
+    def output(self):
+        self._host.connect()
+        res = super(_OfflineForked, self).output()
+        self._host.close()
+        return res
+
+    def kill(self):
+        self._host.connect()
+        super(_OfflineForked, self).kill()
+        self._host.close()
 
 
 plugins.register('seed', Seed)
