@@ -3,3 +3,5 @@ requirements:
   originURL: https://github.com/Stratoscale/rackattack-api.git
 - hash: 2ca11a8a377b19c4e34daf4b2a0353b1bd0889fd
   originURL: https://github.com/Stratoscale/pywhiteboxtest.git
+- hash: 9983084b6212fd14f65ffffeb9a685ef966061b9
+  originURL: https://github.com/Stratoscale/pycommonmultithreading.git

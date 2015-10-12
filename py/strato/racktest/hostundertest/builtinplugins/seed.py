@@ -1,4 +1,6 @@
 from strato.racktest.hostundertest import plugins
+from strato.common.multithreading import waitforpredicate
+
 import random
 import cPickle
 import tempfile
@@ -165,6 +167,20 @@ class _Forked:
         if signalNameOrNumber is None:
             signalNameOrNumber = 'TERM'
         self._host.ssh.run.script("kill -%s %s" % (str(signalNameOrNumber), self._pid))
+
+    def wait(self, timeout=None, interval=None, retries=None):
+        """This method reduces the forkedCallable to a runCallable, with same behaviour and return values"""
+        try:
+            waitforpredicate.WaitForPredicate(timeout=timeout, interval=interval, retries=retries).wait(lambda: self.poll() is not None)
+        except:
+            self.kill()
+            raise
+        status = self.poll()
+        seedOutput = self.output()
+        if not status:
+            raise Exception("forked seed run failed. seed's output was:'%s'" % seedOutput)
+        seedResult = self.result()
+        return seedResult, seedOutput
 
 
 plugins.register('seed', Seed)
