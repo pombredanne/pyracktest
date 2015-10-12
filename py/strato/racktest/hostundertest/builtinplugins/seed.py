@@ -168,7 +168,11 @@ class _Forked(object):
 
     def wait(self, timeout=None, interval=None, retries=None):
         """This method reduces the forkedCallable to a runCallable, with same behaviour and return values"""
-        waitforpredicate.WaitForPredicate(timeout=timeout, interval=interval, retries=retries).wait(lambda: self.poll() is not None)
+        try:
+            waitforpredicate.WaitForPredicate(timeout=timeout, interval=interval, retries=retries).wait(lambda: self.poll() is not None)
+        except:
+            self.kill()
+            raise
         status = self.poll()
         seedOutput = self.output()
         if not status:
