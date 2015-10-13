@@ -19,6 +19,7 @@ from strato.racktest import runner
 import atexit
 import signal
 import threading
+import datetime
 
 _defaultReport = os.path.join(config.TEST_LOGS_DIR, "racktestrunnerreport.json")
 _defaultLiveReport = os.path.join(config.TEST_LOGS_DIR, "racktestrunnerlivereport.json")
@@ -56,6 +57,7 @@ class Runner:
         if len(self._scenarios) == 0:
             raise Exception("No scenarios files found")
         self._results = []
+        os.environ['RUN_TIMESTAMP'] = datetime.datetime.now().strftime("%Y_%m_%d__%H_%M_%S_%f")
 
     def _killSubprocesses(self):
         for pid in self._pids:
