@@ -59,7 +59,11 @@ class Runner:
 
     def _killSubprocesses(self):
         for pid in self._pids:
-            os.kill(signal.SIGTERM, pid)
+            try:
+                os.kill(signal.SIGTERM, pid)
+            except OSError as ex:
+                logging.warn("Could not kill scenario subprocess %(pid)s: %(message)s",
+                             dict(pid=pid, message=ex))
 
     def runSequential(self):
         for scenario in self._scenarios:
