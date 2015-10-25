@@ -44,12 +44,15 @@ class RackAttackAllocation:
     def _rackattackRequirements(self):
         result = {}
         for name, requirements in self._hosts.iteritems():
+            pool = None
+            if "pool" in requirements:
+                pool = requirements["pool"]
             rootfs = rootfslabel.RootfsLabel(requirements['rootfs'])
             hardwareConstraints = dict(requirements)
             del hardwareConstraints['rootfs']
             result[name] = api.Requirement(
                 imageLabel=rootfs.label(), imageHint=rootfs.imageHint(),
-                hardwareConstraints=hardwareConstraints)
+                hardwareConstraints=hardwareConstraints, pool=pool)
         return result
 
     def _rackattackAllocationInfo(self):
