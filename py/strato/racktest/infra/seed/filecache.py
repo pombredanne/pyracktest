@@ -5,18 +5,23 @@ import json
 import shutil
 import base64
 import lockfile
-import cacheregistry
 import argparse
 import sys
 import glob
 import re
 
 
-class FileCache(object):
-
-    def __init__(self, cacheDir):
+class FileCache:
+    def __init__(self, cacheDir=None):
+        if cacheDir is None:
+            cacheDir = self.getDefaultFileCacheDirName()
         self._cacheDir = cacheDir
         self._ensure_dir(self._cacheDir)
+
+    @classmethod
+    def getDefaultFileCacheDirName(cls):
+        rootDir = os.path.dirname(os.getcwd()) + "/" + ".seedcache"
+        return os.getenv('SEED_CACHE_DIR', rootDir)
 
     def _ensure_dir(self, d):
         if not os.path.exists(d):
@@ -161,17 +166,9 @@ class FileCache(object):
         lockfile.LockFile(self._lockFileName(key)).break_lock()
 
 
-def fileCacheDir():
-    rootDir = os.path.dirname(os.getcwd()) + "/" + ".seedcache"
-    return os.getenv('SEED_CACHE_DIR', rootDir)
-
-
-cacheregistry.register('file', lambda: FileCache(fileCacheDir()))
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='File SeedCache controller')
-    parser.add_argument('--root', required=False, default=fileCacheDir())
+    parser.add_argument('--root', required=False, default=FileCache.getDefaultFileCacheDirName())
     parser.add_argument('--verbose', action='store_true', default=False)
     commandGroup = parser.add_mutually_exclusive_group()
     commandGroup.add_argument('--clear', action='store_true', default=False)

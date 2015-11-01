@@ -6,7 +6,6 @@ import tempfile
 
 
 class Test(unittest.TestCase):
-
     def test_fileCacheAccess(self):
         targetDir = tempfile.mkdtemp(suffix="_testdir")
         depFile = tempfile.NamedTemporaryFile()

@@ -27,7 +27,8 @@ class Test(unittest.TestCase):
 
     def test_seedCreator(self):
         code = self._generateSeed1()
-        seed = seedcreator.SeedCreator(code, generateDependencies=True)()
+        creator = seedcreator.SeedCreator(code, generateDependencies=True)
+        seed = creator.create()
         deps = seed['deps']
         self.assertEquals(len(deps), 3)
         depsFileNames = [os.path.basename(dep) for dep in deps.keys()]
@@ -47,13 +48,13 @@ class Test(unittest.TestCase):
     def test_seedCacheAddToCacheSingleProccess(self):
         engine = mock.MagicMock()
         engine.lock = mock.MagicMock()
-        cache = seedcache.SeedCache(engine, seedcreator.SeedCreator)
+        cache = seedcache.SeedCache(engine)
         code = self._generateSeed1()
         engine.get.side_effect = [None, code]
-        code = cache.makeSeed('key1', code, takeSitePackages=True)
+        code = cache.make('key1', code, takeSitePackages=True)
         self.assertNotEqual(None, code)
         self.assertEquals(1, engine.install.call_count)
-        code = cache.makeSeed('key1', code, takeSitePackages=True)
+        code = cache.make('key1', code, takeSitePackages=True)
         self.assertEquals(1, engine.install.call_count)
 
 

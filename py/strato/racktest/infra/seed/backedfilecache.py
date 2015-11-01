@@ -1,11 +1,9 @@
 from strato.racktest.infra.seed import memorycache
 from strato.racktest.infra.seed import filecache
-from strato.racktest.infra.seed import cacheregistry
 
 
 class FileBackedByMemory(filecache.FileCache):
-
-    def __init__(self, cacheDir):
+    def __init__(self, cacheDir=None):
         filecache.FileCache.__init__(self, cacheDir)
         self._memoryCache = memorycache.MemoryCache()
 
@@ -25,6 +23,3 @@ class FileBackedByMemory(filecache.FileCache):
         filecache.FileCache.install(self, seedKey, seedEntry)
         with self._memoryCache.lock(seedKey):
             self._memoryCache.install(seedKey, seedEntry)
-
-
-cacheregistry.register('filecached', lambda: FileBackedByMemory(filecache.fileCacheDir()))

@@ -5,7 +5,7 @@ import logging
 import shutil
 
 
-class SeedCreator(object):
+class SeedCreator:
     ENTRYPOINT_NAME = 'seedentrypoint.py'
 
     def __init__(self, code, generateDependencies=False, takeSitePackages=False, excludePackages=None):
@@ -37,7 +37,7 @@ class SeedCreator(object):
         depsContents = self._parseDepsFile(depsFile) if depsFile is not None else None
         return {'code': eggContents, 'deps': depsContents}
 
-    def __call__(self, *args):
+    def create(self, *args):
         codeDir = tempfile.mkdtemp(suffix="_eggDir")
         try:
             codeFile = os.path.join(codeDir, self.ENTRYPOINT_NAME)
@@ -68,3 +68,8 @@ class SeedCreator(object):
                     depsFile.close()
         finally:
             shutil.rmtree(codeDir, ignore_errors=True)
+
+
+def seedFactory(code, generateDependencies=False, takeSitePackages=False, excludePackages=None):
+    creator = SeedCreator(code, generateDependencies, takeSitePackages, excludePackages)
+    return creator.create()

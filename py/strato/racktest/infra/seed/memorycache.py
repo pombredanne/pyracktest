@@ -3,8 +3,7 @@ import multiprocessing
 import logging
 
 
-class MemoryCache(object):
-
+class MemoryCache:
     def __init__(self):
         self._lock = multiprocessing.Lock()
         self._manager = multiprocessing.Manager()
@@ -24,6 +23,3 @@ class MemoryCache(object):
     def install(self, seedKey, seedEntry):
         logging.debug('Adding seed for key %(key)s to cache', dict(key=seedKey))
         self._cache[seedKey] = seedEntry['code']
-
-from strato.racktest.infra.seed import cacheregistry
-cacheregistry.register('memory', MemoryCache.__init__)

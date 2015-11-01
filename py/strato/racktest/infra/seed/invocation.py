@@ -25,10 +25,9 @@ def snippetCode(code):
             " cPickle.dump(result, f, cPickle.HIGHEST_PROTOCOL)\n")
 
 
-def executeWithResult(host, creator, unique, hasInput, outputTimeout=None):
+def executeWithResult(host, seed, unique, hasInput, outputTimeout=None):
     eggFilename = "/tmp/seed%s.egg" % unique
-    packed = creator()
-    host.ssh.ftp.putContents(eggFilename, packed)
+    host.ssh.ftp.putContents(eggFilename, seed["code"])
     kwargs = {}
     if outputTimeout is not None:
         kwargs['outputTimeout'] = outputTimeout
@@ -40,10 +39,9 @@ def executeWithResult(host, creator, unique, hasInput, outputTimeout=None):
         "PYTHONPATH=/tmp/seed%s.egg python -m seedentrypoint %s" % (unique, moduleArgs), **kwargs)
 
 
-def executeInBackground(host, creator, unique, hasInput):
-    packed = creator()
+def executeInBackground(host, seed, unique, hasInput):
     eggFilename = '/tmp/seed%s.egg' % unique
-    host.ssh.ftp.putContents(eggFilename, packed)
+    host.ssh.ftp.putContents(eggFilename, seed["code"])
     if hasInput:
         moduleArgs = "/tmp/args%(unique)s.pickle /tmp/result%(unique)s.pickle" % dict(unique=unique)
     else:

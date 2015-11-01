@@ -8,18 +8,16 @@ import os
 import logging
 import time
 import inspect
-from strato.racktest.infra.seed import cacheregistry
 from strato.racktest.infra.seed import seedcache
 from strato.racktest.infra.seed import seedcreator
 from strato.racktest.infra.seed import invocation
+from strato.racktest.infra.seed import filecache
+from strato.racktest.infra.seed import backedfilecache
+from strato.racktest.infra.seed import memorycache
 import functools
-
-_seedcache = seedcache.SeedCache(
-    cacheregistry.create(os.getenv('SEED_CACHE', None)), seedcreator.SeedCreator)
 
 
 class Seed:
-
     def __init__(self, host):
         self._host = host
 
@@ -29,12 +27,12 @@ class Seed:
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
         """
         unique = self._unique()
-        seedGenerator = lambda: seedcreator.SeedCreator(invocation.snippetCode(code),
-                                                        generateDependencies=False,
-                                                        takeSitePackages=takeSitePackages,
-                                                        excludePackages=excludePackages)()['code']
+        seed = seedcreator.seedFactory(invocation.snippetCode(code),
+                                       generateDependencies=False,
+                                       takeSitePackages=takeSitePackages,
+                                       excludePackages=excludePackages)
         output = invocation.executeWithResult(self._host,
-                                              seedGenerator,
+                                              seed,
                                               unique,
                                               hasInput=False,
                                               outputTimeout=outputTimeout)
@@ -46,9 +44,9 @@ class Seed:
         kwargs = dict(kwargs)
         outputTimeout = kwargs.pop('outputTimeout', None)
         unique = self._unique()
-        seedGenerator = self._prepareCallable(callable, unique, *args, **kwargs)
+        seed = self._generateSeedWithCacheWithNoCacheFallback(callable, unique, *args, **kwargs)
         output = invocation.executeWithResult(self._host,
-                                              seedGenerator,
+                                              seed,
                                               unique,
                                               hasInput=True,
                                               outputTimeout=outputTimeout)
@@ -61,34 +59,41 @@ class Seed:
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
         """
         unique = self._unique()
-        seedGenerator = lambda: seedcreator.SeedCreator(invocation.snippetCode(code),
-                                                        generateDependencies=False,
-                                                        takeSitePackages=takeSitePackages,
-                                                        excludePackages=excludePackages)()['code']
-        invocation.executeInBackground(self._host, seedGenerator, unique, hasInput=False)
+        seed = seedcreator.seedFactory(invocation.snippetCode(code),
+                                       generateDependencies=False,
+                                       takeSitePackages=takeSitePackages,
+                                       excludePackages=excludePackages)
+        invocation.executeInBackground(self._host, seed, unique, hasInput=False)
         return _Forked(self._host, unique)
 
     def forkCallable(self, callable, *args, **kwargs):
         "Currently, only works on global functions. Also accepts 'takeSitePackages' kwarg"
         kwargs = dict(kwargs)
         unique = self._unique()
-        seedGenerator = self._prepareCallable(callable, unique, *args, **kwargs)
-        invocation.executeInBackground(self._host, seedGenerator, unique, hasInput=True)
+        seed = self._generateSeedWithCacheWithNoCacheFallback(callable, unique, *args, **kwargs)
+        invocation.executeInBackground(self._host, seed, unique, hasInput=True)
         return _Forked(self._host, unique)
 
-    def _prepareCallable(self, callable, unique, *args, **kwargs):
+    def _generateSeedWithCacheWithNoCacheFallback(self, callable, unique, *args, **kwargs):
         excludePackages = kwargs.pop('excludePackages', None)
         takeSitePackages = kwargs.pop('takeSitePackages', False)
+        noCache = kwargs.pop('noCache', False)
         invocation.installArgs(self._host, unique, args, kwargs)
         code = invocation.callableCode(callable)
         cacheKey = self._cacheKey(callable,
                                   takeSitePackages=takeSitePackages,
                                   excludePackages=takeSitePackages)
-        return functools.partial(_seedcache.makeSeed,
-                                 cacheKey,
-                                 code,
-                                 takeSitePackages=takeSitePackages,
-                                 excludePackages=excludePackages)
+        global cache
+        if cache is None or noCache:
+            seed = seedcreator.seedFactory(code, False, takeSitePackages, excludePackages)
+        else:
+            try:
+                seed = cache.make(cacheKey, code, takeSitePackages, excludePackages)
+            except:
+                logging.warn('Failed to operate cache for key %(key)s, failover to creation clear cache?',
+                             dict(cacheKey=cacheKey), exc_info=1)
+            seed = seedcreator.seedFactory(code, False, takeSitePackages, excludePackages)
+        return seed
 
     def _cacheKey(self, callable, **packArgs):
         args = ';'.join(["%s=%s" % (key, value) for key, value in packArgs.iteritems()])
@@ -98,9 +103,29 @@ class Seed:
     def _unique(self):
         return "%09d" % random.randint(0, 1000 * 1000 * 1000)
 
+    @classmethod
+    def _generateSeedCacheEngine(cls, engineType):
+        engineTypeToClass = dict(filecached=backedfilecache.FileBackedByMemory,
+                                 file=filecache.FileCache,
+                                 memory=filecache.FileCache)
+        if engineType not in engineTypeToClass:
+            logging.error("Invalid seed cache engine type given: %(engineType)s",
+                          dict(engineType=engineType))
+            raise ValueError(engineType)
+        engineClass = engineTypeToClass[engineType]
+        engineInstance = engineClass()
+        return engineInstance
+
+    @classmethod
+    def generateSeedCache(cls):
+        seedCacheEngineType = os.getenv('SEED_CACHE', None)
+        if seedCacheEngineType is None:
+            return None
+        seedCacheEngine = cls._generateSeedCacheEngine(seedCacheEngineType)
+        return seedcache.SeedCache(seedCacheEngine)
+
 
 class _Forked:
-
     def __init__(self, host, unique):
         self._host = host
         self._unique = unique
@@ -134,4 +159,5 @@ class _Forked:
         self._host.ssh.run.script("kill -%s %s" % (str(signalNameOrNumber), self._pid))
 
 
+cache = Seed.generateSeedCache()
 plugins.register('seed', Seed)
