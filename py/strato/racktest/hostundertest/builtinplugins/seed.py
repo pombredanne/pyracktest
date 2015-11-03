@@ -83,7 +83,10 @@ class Seed:
                          excludePackages, joinPythonNamespaces):
         callableModule = callable.__module__
         callableBasePath = callableModule.replace('.', os.sep)
-        callableRootPath = sys.modules[callable.__module__].__file__.split(callableBasePath)[0]
+        if hasattr(sys.modules[callable.__module__], '__file__'):
+            callableRootPath = sys.modules[callable.__module__].__file__.split(callableBasePath)[0]
+        else:
+            callableRootPath = None
         argsPickle = "/tmp/args%s.pickle" % unique
         code = (
             "import %(module)s\n"
