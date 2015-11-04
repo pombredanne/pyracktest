@@ -91,7 +91,10 @@ class Seed:
                                   excludePackages=takeSitePackages)
         callableModule = callable.__module__
         callableBasePath = callableModule.replace('.', os.sep)
-        callableRootPath = sys.modules[callable.__module__].__file__.split(callableBasePath)[0]
+        if hasattr(sys.modules[callableModule], '__file__'):
+            callableRootPath = sys.modules[callableModule].__file__.split(callableBasePath)[0]
+        else:
+            callableRootPath = None
         return functools.partial(_seedcache.makeSeed,
                                  cacheKey,
                                  code,
