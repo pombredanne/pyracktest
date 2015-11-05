@@ -8,12 +8,14 @@ import shutil
 class SeedCreator(object):
     ENTRYPOINT_NAME = 'seedentrypoint.py'
 
-    def __init__(self, code, generateDependencies=False, takeSitePackages=False, excludePackages=None, joinPythonNamespaces=True):
+    def __init__(self, code, generateDependencies=False, takeSitePackages=False, excludePackages=None,
+                 joinPythonNamespaces=True, callableRootPath=None):
         self._takeSitePackages = takeSitePackages
         self._excludePackages = excludePackages
         self._generateDependencies = generateDependencies
-        self._code = code
         self._joinPythonNamespaces = joinPythonNamespaces
+        self._callableRootPath = callableRootPath
+        self._code = code
 
     def _shouldManifestDependency(self, depedency):
         return os.path.basename(depedency) != self.ENTRYPOINT_NAME
@@ -48,16 +50,16 @@ class SeedCreator(object):
             depsFile = tempfile.NamedTemporaryFile(suffix=".deps") if self._generateDependencies else None
             excludePackages = (['--excludeModule'] + [package for package in self._excludePackages]) \
                 if self._excludePackages is not None else []
-            depedenciesGeneratorPart = (["--createDeps", depsFile.name])\
+            dependenciesGeneratorPart = (["--createDeps", depsFile.name])\
                 if self._generateDependencies else []
             try:
                 cmd = ["python", "-m", "upseto.packegg", "--entryPoint", codeFile,
                        "--output", eggFile.name] + \
-                      (["--joinPythonNamespaces"] if joinPythonNamespaces else []) + \
-                      (['--takeSitePackages'] if takeSitePackages else []) + \
-                      (excludePackages) + (depedenciesGeneratorPart)
+                      (["--joinPythonNamespaces"] if self._joinPythonNamespaces else []) + \
+                      (['--takeSitePackages'] if self._takeSitePackages else []) + \
+                      (excludePackages) + (dependenciesGeneratorPart)
                 env = dict(os.environ, PYTHONPATH=codeDir +
-                           (":%s" % callableRootPath if callableRootPath is not None else "") +
+                           (":%s" % self._callableRootPath if self._callableRootPath is not None else "") +
                            (":" + os.environ['PYTHONPATH']))
                 subprocess.check_output(cmd, stderr=subprocess.STDOUT, close_fds=True, env=env)
                 manifest = self._generateManifest(eggFile, depsFile)

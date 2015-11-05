@@ -70,7 +70,6 @@ class Seed:
                                                         excludePackages=excludePackages,
                                                         joinPythonNamespaces=joinPythonNamespaces)()['code']
         invocation.executeInBackground(self._host, seedGenerator, unique, hasInput=False)
-
         return _Forked(self._host, unique)
 
     def forkCallable(self, callable, *args, **kwargs):
@@ -82,18 +81,17 @@ class Seed:
         return _Forked(self._host, unique)
 
     def _prepareCallable(self, callable, unique, *args, **kwargs):
+        excludePackages = kwargs.pop('excludePackages', None)
+        takeSitePackages = kwargs.pop('takeSitePackages', False)
+        joinPythonNamespaces = kwargs.pop('joinPythonNamespaces', True)
+        invocation.installArgs(self._host, unique, args, kwargs)
+        code = invocation.callableCode(callable)
         callableModule = callable.__module__
         callableBasePath = callableModule.replace('.', os.sep)
         if hasattr(sys.modules[callableModule], '__file__'):
             callableRootPath = sys.modules[callableModule].__file__.split(callableBasePath)[0]
         else:
             callableRootPath = None
-
-        excludePackages = kwargs.pop('excludePackages', None)
-        takeSitePackages = kwargs.pop('takeSitePackages', False)
-        joinPythonNamespaces = kwargs.pop('joinPythonNamespaces', True)
-        invocation.installArgs(self._host, unique, args, kwargs)
-        code = invocation.callableCode(callable)
         cacheKey = self._cacheKey(callable,
                                   takeSitePackages=takeSitePackages,
                                   excludePackages=takeSitePackages,
