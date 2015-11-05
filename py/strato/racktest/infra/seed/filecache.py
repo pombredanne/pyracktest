@@ -10,6 +10,7 @@ import argparse
 import sys
 import glob
 import re
+import errno
 
 
 class FileCache(object):
@@ -19,8 +20,12 @@ class FileCache(object):
         self._ensure_dir(self._cacheDir)
 
     def _ensure_dir(self, d):
-        if not os.path.exists(d):
-            os.makedirs(d)
+        try:
+            if not os.path.exists(d):
+                os.makedirs(d)
+        except OSError, e:
+            if e.errno != errno.EEXIST:
+                raise
 
     def _generatePath(self, key, suffix):
         return "%s/%s.%s" % (self._cacheDir, key, suffix)
