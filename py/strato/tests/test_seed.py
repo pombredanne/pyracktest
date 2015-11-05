@@ -31,7 +31,7 @@ class Test(unittest.TestCase):
         deps = seed['deps']
         self.assertEquals(len(deps), 3)
         depsFileNames = [os.path.basename(dep) for dep in deps.keys()]
-        self.assertListEqual(depsFileNames, ['additiondependency.py', 'addition.py', '__init__.py'])
+        self.assertListEqual(depsFileNames, ['__init__.py', 'additiondependency.py', 'addition.py'])
         codeDir = tempfile.mkdtemp(suffix="_runDir")
         try:
             codeFile = os.path.join(codeDir, "run.egg")
