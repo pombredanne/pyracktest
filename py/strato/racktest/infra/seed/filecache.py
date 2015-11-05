@@ -33,8 +33,8 @@ class FileCache(object):
     def _lockFileName(self, key):
         return self._generatePath(key, 'lock')
 
-    def _depsFileName(self, key):
-        return self._generatePath(key, 'deps')
+    def _manifestFileName(self, key):
+        return self._generatePath(key, 'manifest')
 
     def _seedFileName(self, key):
         return self._generatePath(key, 'code')
@@ -44,7 +44,7 @@ class FileCache(object):
 
     @contextmanager
     def lock(self, key):
-        sanitizedKey = self._sanitizeKeyForFileName(key)
+        sanitizedKey = key.hash
         lock = lockfile.LockFile(self._lockFileName(sanitizedKey))
         while True:
             try:
@@ -63,13 +63,8 @@ class FileCache(object):
         finally:
             lock.release()
 
-    def _loadDependenciesFile(self, key):
-        path = self._depsFileName(key)
-        with open(path, 'r') as f:
-            return json.loads(f.read())
-
     def _validateDependencies(self, key):
-        dependencies = self._loadDependenciesFile(key)
+        dependencies = self._loadManifest(key)['deps']
         for depPath, mTime in dependencies.iteritems():
             fileMtime = int(os.path.getmtime(depPath))
             if fileMtime != int(mTime):
@@ -104,10 +99,15 @@ class FileCache(object):
                 pid = _getPidFromUniqueFile(uniqueLockFile)
                 return _existsPid(int(pid))
 
-    def _storeDependencies(self, key, deps):
-        path = self._depsFileName(key)
+    def _loadManifest(self, key):
+        path = self._manifestFileName(key)
+        with open(path, 'r') as f:
+            return json.loads(f.read())
+
+    def _storeManifest(self, key, manifest):
+        path = self._manifestFileName(key)
         with open(path, 'w') as f:
-            f.write(json.dumps(deps))
+            f.write(json.dumps(manifest))
 
     def _storeCode(self, key, code):
         seedFile = self._seedFileName(key)
@@ -115,7 +115,7 @@ class FileCache(object):
             return f.write(code)
 
     def get(self, key):
-        sanitizedKey = self._sanitizeKeyForFileName(key)
+        sanitizedKey = key.hash
         seedFile = self._seedFileName(sanitizedKey)
         if not os.path.exists(seedFile):
             return None
@@ -131,11 +131,11 @@ class FileCache(object):
             return None
 
     def install(self, seedKey, seedEntry):
-        sanitizedKey = self._sanitizeKeyForFileName(seedKey)
+        sanitizedKey = seedKey.hash
         logging.debug('Installing seed for key %(key)s - sanitized %(sanitized)s',
                       dict(key=seedKey, sanitized=sanitizedKey))
         self._storeCode(sanitizedKey, seedEntry['code'])
-        self._storeDependencies(sanitizedKey, seedEntry['deps'])
+        self._storeManifest(sanitizedKey, {'deps': seedEntry['deps'], 'key':  seedKey.__repr__()})
 
     def clean(self):
         if self._cacheDir is None or self._cacheDir == '':
@@ -146,11 +146,13 @@ class FileCache(object):
         for codeFile in glob.iglob(self._cacheDir + '/*.code'):
             keyName = codeFile[len(self._cacheDir) + 1:-len('.code')]
             lockFile = self._lockFileName(keyName)
-            args = base64.urlsafe_b64decode(keyName).split(':')
             try:
-                deps = self._loadDependenciesFile(keyName)
+                manifest = self._loadManifest(keyName)
+                deps = manifest['deps']
+                args = manifest['key'].split(':')
             except:
                 deps = {'error': sys.exc_info()[0]}
+                args = None
             yield keyName, args, deps, lockfile.LockFile(lockFile)
 
     def _unlinkIfExists(self, path):
@@ -159,7 +161,7 @@ class FileCache(object):
 
     def removeKey(self, key):
         self.break_lock(key)
-        self._unlinkIfExists(self._depsFileName(key))
+        self._unlinkIfExists(self._manifestFileName(key))
         self._unlinkIfExists(self._seedFileName(key))
 
     def break_lock(self, key):

@@ -92,12 +92,8 @@ class Seed:
             callableRootPath = sys.modules[callableModule].__file__.split(callableBasePath)[0]
         else:
             callableRootPath = None
-        cacheKey = self._cacheKey(callable,
-                                  takeSitePackages=takeSitePackages,
-                                  excludePackages=takeSitePackages,
-                                  joinPythonNamespaces=joinPythonNamespaces,
-                                  callableRootPath=callableRootPath)
-        return functools.partial(_seedcache.makeSeed ,
+        cacheKey = self._cacheKey(callable)
+        return functools.partial(_seedcache.makeSeed,
                                  cacheKey,
                                  code,
                                  takeSitePackages=takeSitePackages,
@@ -105,10 +101,9 @@ class Seed:
                                  joinPythonNamespaces=joinPythonNamespaces,
                                  callableRootPath=callableRootPath)
 
-    def _cacheKey(self, callable, **packArgs):
-        args = ';'.join(["%s=%s" % (key, value) for key, value in packArgs.iteritems()])
+    def _cacheKey(self, callable):
         callableFilePath = inspect.getfile(callable)
-        return callableFilePath + ":" + callable.__name__ + ":" + args
+        return callableFilePath + ":" + callable.__name__
 
     def _unique(self):
         return "%09d" % random.randint(0, 1000 * 1000 * 1000)
