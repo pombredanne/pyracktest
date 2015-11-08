@@ -102,7 +102,7 @@ class Seed:
                                  callableRootPath=callableRootPath)
 
     def _cacheKey(self, callable):
-        callableFilePath = inspect.getfile(callable)
+        callableFilePath = inspect.getfile(callable) if not inspect.isbuiltin(callable) else '__builtin__' 
         return callableFilePath + ":" + callable.__name__
 
     def _unique(self):

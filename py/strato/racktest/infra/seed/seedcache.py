@@ -36,7 +36,6 @@ class SeedCache(object):
             return descriptor['code']
 
     def makeSeed(self, key, code, **packArgs):
-        #import ipdb;ipdb.set_trace()
         seedId = SeedID(key, **packArgs)
         noCache = packArgs.get('noCache', False)
         if self._engine is None or noCache:
