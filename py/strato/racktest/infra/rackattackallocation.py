@@ -65,6 +65,13 @@ class RackAttackAllocation:
             dict(callback=callback, args=(name,))
             for name in self._nodes])
 
+    def releaseHost(self, name):
+        if name not in self._nodes:
+            logging.error("Cannot release node '%(name)s' since it's not allocated", dict(name=name))
+            raise ValueError(name)
+        self._allocation.releaseHost(name)
+        del self._nodes[name]
+
     def _postMortemAllocation(self):
         try:
             filename, contents = self._allocation.fetchPostMortemPack()

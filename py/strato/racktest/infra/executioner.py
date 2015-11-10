@@ -41,6 +41,8 @@ class Executioner:
             self._test.host = self.host
         if not hasattr(self._test, 'hosts'):
             self._test.hosts = self.hosts
+        if not hasattr(self._test, 'releaseHost'):
+            self._test.releaseHost = self._releaseHost
         logging.info("Allocating Nodes")
         self._allocation = rackattackallocation.RackAttackAllocation(self._test.HOSTS)
         timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
@@ -57,6 +59,13 @@ class Executioner:
                 self._allocation.free()
             except:
                 logging.exception("Unable to free allocation")
+
+    def _releaseHost(self, name):
+        if name not in self._hosts:
+            logging.error("Cannot release host %(name)s since it's not allocated", dict(name=name))
+            raise ValueError(name)
+        self._allocation.releaseHost(name)
+        del self._hosts[name]
 
     def _testTimedOut(self):
         logging.error(
