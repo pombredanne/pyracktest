@@ -69,7 +69,10 @@ class RackAttackAllocation:
         if name not in self._nodes:
             logging.error("Cannot release node '%(name)s' since it's not allocated", dict(name=name))
             raise ValueError(name)
-        self._allocation.releaseHost(name)
+        if len(self._nodes) == 1:
+            self.free()
+        else:
+            self._allocation.releaseHost(name)
         del self._nodes[name]
 
     def _postMortemAllocation(self):

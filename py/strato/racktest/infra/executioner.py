@@ -55,10 +55,12 @@ class Executioner:
             finally:
                 self._tearDown()
         finally:
-            try:
-                self._allocation.free()
-            except:
-                logging.exception("Unable to free allocation")
+            wasAllocationFreedSinceAllHostsWereReleased = not bool(self._hosts)
+            if not wasAllocationFreedSinceAllHostsWereReleased:
+                try:
+                    self._allocation.free()
+                except:
+                    logging.exception("Unable to free allocation")
 
     def _releaseHost(self, name):
         if name not in self._hosts:
@@ -149,6 +151,9 @@ class Executioner:
             raise
 
     def _tearDown(self):
+        areThereHostsToTearDown = bool(self._hosts)
+        if not areThereHostsToTearDown:
+            return
         logging.info("Tearing down test in '%(filename)s'", dict(filename=self._filename()))
         try:
             getattr(self._test, 'tearDown', lambda: None)()
