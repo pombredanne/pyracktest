@@ -15,8 +15,9 @@ from strato.racktest.infra.seed import seedcreator
 from strato.racktest.infra.seed import invocation
 import functools
 
-_seedcache = seedcache.SeedCache(
-    cacheregistry.create(os.getenv('SEED_CACHE', None)), seedcreator.SeedCreator)
+_engine = cacheregistry.create(os.getenv('SEED_CACHE', None))
+_creator = seedcreator.SeedCreator
+_seedcache = seedcache.SeedCache(_engine, _creator)
 
 
 class Seed:
@@ -31,11 +32,11 @@ class Seed:
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
         """
         unique = self._unique()
-        seedGenerator = lambda: seedcreator.SeedCreator(invocation.snippetCode(code),
-                                                        generateDependencies=False,
-                                                        takeSitePackages=takeSitePackages,
-                                                        excludePackages=excludePackages,
-                                                        joinPythonNamespaces=joinPythonNamespaces)()['code']
+        seedGenerator = lambda: _creator(invocation.snippetCode(code),
+                                         generateDependencies=False,
+                                         takeSitePackages=takeSitePackages,
+                                         excludePackages=excludePackages,
+                                         joinPythonNamespaces=joinPythonNamespaces)()['code']
         output = invocation.executeWithResult(self._host,
                                               seedGenerator,
                                               unique,
@@ -64,11 +65,11 @@ class Seed:
         for example: "runCode('import yourmodule\nresult = yourmodule.func()\n')"
         """
         unique = self._unique()
-        seedGenerator = lambda: seedcreator.SeedCreator(invocation.snippetCode(code),
-                                                        generateDependencies=False,
-                                                        takeSitePackages=takeSitePackages,
-                                                        excludePackages=excludePackages,
-                                                        joinPythonNamespaces=joinPythonNamespaces)()['code']
+        seedGenerator = lambda: _creator(invocation.snippetCode(code),
+                                         generateDependencies=False,
+                                         takeSitePackages=takeSitePackages,
+                                         excludePackages=excludePackages,
+                                         joinPythonNamespaces=joinPythonNamespaces)()['code']
         invocation.executeInBackground(self._host, seedGenerator, unique, hasInput=False)
         return _Forked(self._host, unique)
 
