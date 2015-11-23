@@ -19,11 +19,11 @@ class MemoryCache(object):
             self._lock.release()
 
     def get(self, key):
-        return self._cache.get(key, None)
+        return self._cache.get(key.hash, None)
 
     def install(self, seedKey, seedEntry):
         logging.debug('Adding seed for key %(key)s to cache', dict(key=seedKey))
-        self._cache[seedKey] = seedEntry['code']
+        self._cache[seedKey.hash] = seedEntry['code']
 
 from strato.racktest.infra.seed import cacheregistry
 cacheregistry.register('memory', MemoryCache.__init__)
