@@ -13,7 +13,7 @@ from strato.racktest.infra import logbeamfromlocalhost
 
 
 class RackAttackAllocation:
-    _NO_PROGRESS_TIMEOUT = 2 * 60
+    _NO_PROGRESS_TIMEOUT = 60 * 60
 
     def __init__(self, hosts):
         self._hosts = hosts
