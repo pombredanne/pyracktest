@@ -50,11 +50,12 @@ class Executioner:
         logging.progress("Done allocating nodes")
         try:
             self._setUp()
-            try:
-                self._run()
-            finally:
-                self._tearDown()
+            self._run()
         finally:
+            try:
+                self._tearDown()
+            except:
+                logging.ERROR("Tear down failure")
             wasAllocationFreedSinceAllHostsWereReleased = not bool(self._hosts)
             if not wasAllocationFreedSinceAllHostsWereReleased:
                 try:
