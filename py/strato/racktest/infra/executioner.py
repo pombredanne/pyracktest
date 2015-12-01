@@ -21,6 +21,9 @@ class Executioner:
         'requests.packages.urllib3.connectionpool')
 
     def __init__(self, klass):
+        self._cleanUpMethods = []
+        if not hasattr(klass, 'addCleanup'):
+            klass.addCleanup = self._addCleanup
         self._test = klass()
         self._testTimeout = getattr(self._test, 'ABORT_TEST_TIMEOUT', self.ABORT_TEST_TIMEOUT_DEFAULT)
         self._onTimeoutCallbackTimeout = getattr(
@@ -55,12 +58,31 @@ class Executioner:
             finally:
                 self._tearDown()
         finally:
+            self._cleanUp()
             wasAllocationFreedSinceAllHostsWereReleased = not bool(self._hosts)
             if not wasAllocationFreedSinceAllHostsWereReleased:
                 try:
                     self._allocation.free()
                 except:
                     logging.exception("Unable to free allocation")
+
+    def _cleanUp(self):
+        if not self._cleanUpMethods:
+            return
+        logging.info("Performing cleanup...")
+        while self._cleanUpMethods:
+            callback, args, kwargs = self._cleanUpMethods.pop()
+            logging.info("Invoking cleanup method '%(callback)s with (%(args)s, %(kwargs)s...",
+                         dict(callback=callback, args=args, kwargs=kwargs))
+            try:
+                callback(*args, **kwargs)
+            except:
+                logging.exception("An error has occurred during the cleanup method '%(callback)s'. Skipping",
+                                  dict(callback=callback))
+        logging.info("Cleanup done.")
+
+    def _addCleanup(self, callback, *args, **kwargs):
+        self._cleanUpMethods.append((callback, args, kwargs))
 
     def _releaseHost(self, name):
         if name not in self._hosts:
@@ -83,6 +105,7 @@ class Executioner:
             suite.outputExceptionStackTrace()
         else:
             logging.info("'onTimeout' completed, will commit suicide now")
+        self._cleanUp()
         self._killSelf()
         time.sleep(2)
         self._killSelfHard()
