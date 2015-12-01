@@ -55,7 +55,7 @@ class Executioner:
             try:
                 self._tearDown()
             except:
-                logging.ERROR("Tear down failure")
+                logging.exception("Tear down failure")
             wasAllocationFreedSinceAllHostsWereReleased = not bool(self._hosts)
             if not wasAllocationFreedSinceAllHostsWereReleased:
                 try:
