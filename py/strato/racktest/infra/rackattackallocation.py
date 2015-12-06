@@ -95,6 +95,7 @@ class RackAttackAllocation:
         self._overallPercent = overallPercent
 
     def _waitForAllocation(self):
+        logging.info("Waiting for all nodes to be allocated...")
         INTERVAL = 5
         lastOverallPercent = 0
         lastOverallPercentChange = time.time()
@@ -106,7 +107,12 @@ class RackAttackAllocation:
                 if self._overallPercent != lastOverallPercent:
                     lastOverallPercent = self._overallPercent
                     lastOverallPercentChange = time.time()
-                    logging.progress("Allocation %(percent)s%% complete", dict(percent=lastOverallPercent))
+                    if lastOverallPercent < 100:
+                        msg = "Allocation %(percent)s%% complete"
+                    else:
+                        msg = "Allocation %(percent)s%% complete, but still waiting for the 'go-ahead' " \
+                              " from Rackattack..."
+                    logging.progress(msg, dict(percent=lastOverallPercent))
                 if time.time() > lastOverallPercentChange + self._NO_PROGRESS_TIMEOUT:
                     raise Exception("Allocation progress hanged at %(percent)s%% for %(seconds)s seconds",
                                     dict(percent=lastOverallPercent, seconds=self._NO_PROGRESS_TIMEOUT))
