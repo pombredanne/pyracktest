@@ -46,11 +46,11 @@ class Executioner:
             self._test.hosts = self.hosts
         if not hasattr(self._test, 'releaseHost'):
             self._test.releaseHost = self._releaseHost
-        logging.info("Allocating Nodes")
+        logging.progress("Allocating Nodes...")
         self._allocation = rackattackallocation.RackAttackAllocation(self._test.HOSTS)
         timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
         logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
-        logging.progress("Done allocating nodes")
+        logging.progress("Done allocating nodes.")
         try:
             self._setUp()
             try:
@@ -132,9 +132,13 @@ class Executioner:
         return filename
 
     def _setUpHost(self, name):
-        host = hostundertest.host.Host(self._allocation.nodes()[name], name)
-        logging.info("Host allocated: %(name)s: %(credentials)s", dict(
-            name=name, credentials=host.node.rootSSHCredentials()))
+        node = self._allocation.nodes()[name]
+        host = hostundertest.host.Host(node, name)
+        credentials = host.node.rootSSHCredentials()
+        address = "%(hostname)s:%(port)s" % credentials
+        logging.info("Connecting to host '%(nodeName)s' (%(server)s, address: %(address)s)...",
+                     dict(nodeName=name, server=node.id(), address=address))
+        logging.debug("Full credentials of host: %(credentials)s", dict(credentials=credentials))
         try:
             host.ssh.waitForTCPServer()
             host.ssh.connect()
@@ -144,6 +148,7 @@ class Executioner:
                 "host %(id)s name %(name)s", dict(id=host.node.id(), name=name))
             host.logbeam.postMortemSerial()
             raise
+        logging.info("Connected to %(node)s.", dict(node=name))
         self._hosts[name] = host
         getattr(self._test, 'setUpHost', lambda x: x)(name)
 
