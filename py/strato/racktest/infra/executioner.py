@@ -12,7 +12,7 @@ import sys
 
 
 class Executioner:
-    ABORT_TEST_TIMEOUT_DEFAULT = 10 * 60
+    ABORT_TEST_TIMEOUT_DEFAULT = 1000000000000000 * 60
     ON_TIMEOUT_CALLBACK_TIMEOUT_DEFAULT = 5 * 60
     DISCARD_LOGGING_OF = (
         'paramiko',
@@ -55,8 +55,12 @@ class Executioner:
             self._setUp()
             try:
                 self._run()
+            except:
+                import pdb; pdb.set_trace()
             finally:
                 self._tearDown()
+        except:
+            import pdb; pdb.set_trace()
         finally:
             self._cleanUp()
             wasAllocationFreedSinceAllHostsWereReleased = not bool(self._hosts)
