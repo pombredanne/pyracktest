@@ -20,6 +20,9 @@ class Executioner:
         'selenium.webdriver.remote.remote_connection',
         'requests.packages.urllib3.connectionpool')
 
+    CREATE_NEW_ALLOCATION = None
+    EXISTING_ALLOCATION_FILENAME = 'allocation.ID'
+
     def __init__(self, klass):
         self._cleanUpMethods = []
         if not hasattr(klass, 'addCleanup'):
@@ -28,6 +31,8 @@ class Executioner:
         self._testTimeout = getattr(self._test, 'ABORT_TEST_TIMEOUT', self.ABORT_TEST_TIMEOUT_DEFAULT)
         self._onTimeoutCallbackTimeout = getattr(
             self._test, 'ON_TIMEOUT_CALLBACK_TIMEOUT', self.ON_TIMEOUT_CALLBACK_TIMEOUT_DEFAULT)
+        self._doNotReleaseAllocation = os.getenv('KEEP_ALLOCATION', 'false').lower() in ['true']
+        self._existingAllocationID = self._setupExistingAllocation()
 
     def host(self, name):
         return self._hosts[name]
@@ -47,7 +52,8 @@ class Executioner:
         if not hasattr(self._test, 'releaseHost'):
             self._test.releaseHost = self._releaseHost
         logging.progress("Allocating Nodes...")
-        self._allocation = rackattackallocation.RackAttackAllocation(self._test.HOSTS)
+        self._allocation = rackattackallocation.RackAttackAllocation(
+            self._test.HOSTS, self._existingAllocationID)
         timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
         logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
         logging.progress("Done allocating nodes.")
@@ -60,11 +66,13 @@ class Executioner:
         finally:
             self._cleanUp()
             wasAllocationFreedSinceAllHostsWereReleased = not bool(self._hosts)
-            if not wasAllocationFreedSinceAllHostsWereReleased:
+            if not (wasAllocationFreedSinceAllHostsWereReleased or self._doNotReleaseAllocation):
                 try:
                     self._allocation.free()
                 except:
                     logging.exception("Unable to free allocation")
+            else:
+                logging.info('Not freeing allocation')
 
     def _cleanUp(self):
         if not self._cleanUpMethods:
@@ -192,3 +200,25 @@ class Executioner:
             raise
         tearDownHost = getattr(self._test, 'tearDownHost', lambda x: x)
         self._allocation.runOnEveryHost(tearDownHost, "Tearing down host")
+
+    def _setupExistingAllocation(self):
+        existingAllocationID = os.getenv('ALLOCATION_ID', None)
+        if existingAllocationID == self.CREATE_NEW_ALLOCATION:
+            return self.CREATE_NEW_ALLOCATION
+        elif existingAllocationID == self.EXISTING_ALLOCATION_FILENAME:
+            return self._readAllocationFromFile(self.EXISTING_ALLOCATION_FILENAME)
+        else:
+            return int(existingAllocationID)
+
+    def _readAllocationFromFile(self, filename):
+        allocationID = None
+        f = open(filename, 'r')
+        try:
+            allocationID = int(f.readlines()[0])
+        except Exception as e:
+            logging.error('failed to fetch allocationID from %(_filename)s. Exception %(_err)s', dict(
+                _filename=filename, _err=e.message))
+            raise e
+        finally:
+            f.close()
+        return allocationID

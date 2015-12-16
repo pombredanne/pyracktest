@@ -15,12 +15,16 @@ from strato.racktest.infra import logbeamfromlocalhost
 class RackAttackAllocation:
     _NO_PROGRESS_TIMEOUT = 2 * 60
 
-    def __init__(self, hosts):
+    def __init__(self, hosts, allocationID=None):
         self._hosts = hosts
         self._overallPercent = 0
         self._client = clientfactory.factory()
-        self._allocation = self._client.allocate(
-            requirements=self._rackattackRequirements(), allocationInfo=self._rackattackAllocationInfo())
+        if allocationID is None:
+            self._allocation = self._client.allocate(
+                requirements=self._rackattackRequirements(), allocationInfo=self._rackattackAllocationInfo())
+        else:
+            self._allocation = self._client.allocateExisting(
+                requirements=self._rackattackRequirements(), allocationID=allocationID)
         self._allocation.registerProgressCallback(self._progress)
 #       self._allocation.setForceReleaseCallback()
         try:
