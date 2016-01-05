@@ -55,12 +55,11 @@ class SeedCreator(object):
             try:
                 cmd = ["python", "-m", "upseto.packegg", "--entryPoint", codeFile,
                        "--output", eggFile.name] + \
-                      (["--joinPythonNamespaces"] if self._joinPythonNamespaces else []) + \
-                      (['--takeSitePackages'] if self._takeSitePackages else []) + \
-                      (excludePackages) + (dependenciesGeneratorPart)
-                env = dict(os.environ, PYTHONPATH=codeDir +
-                           (":%s" % self._callableRootPath if self._callableRootPath is not None else "") +
-                           (":" + os.environ['PYTHONPATH']))
+                    (["--joinPythonNamespaces"] if self._joinPythonNamespaces else []) + \
+                    (['--takeSitePackages'] if self._takeSitePackages else []) + \
+                    (excludePackages) + (dependenciesGeneratorPart)
+                env = dict(os.environ, PYTHONPATH=codeDir + ":" + os.environ['PYTHONPATH'] +
+                           (":%s" % self._callableRootPath if self._callableRootPath is not None else ""))
                 subprocess.check_output(cmd, stderr=subprocess.STDOUT, close_fds=True, env=env)
                 manifest = self._generateManifest(eggFile, depsFile)
                 return manifest
