@@ -197,11 +197,15 @@ if __name__ == '__main__':
         sys.exit(0)
     if args.display:
         for keyName, seedArgs, deps, lockFile in cache.traverse():
-            output = sys.stdout if not lockFile.is_locked() else sys.stderr
-            output.write('CachedSeed: %(module)s:%(method)s - locked: %(locked)s status: %(status)s\n' %
-                         dict(module=seedArgs[0],
-                              method=seedArgs[1],
-                              locked=lockFile.is_locked(),
-                              status='valid' if cache._validateDependencies(keyName) else 'outdated'))
-            if args.verbose:
-                print 'Dependencies: %s' % deps
+            try:
+                output = sys.stdout if not lockFile.is_locked() else sys.stderr
+                output.write('CachedSeed: %(module)s:%(method)s - locked: %(locked)s status: %(status)s\n' %
+                             dict(module=seedArgs[0],
+                                  method=seedArgs[1],
+                                  locked=lockFile.is_locked(),
+                                  status='valid' if cache._validateDependencies(keyName) else 'outdated'))
+                if args.verbose:
+                    print 'Dependencies: %s' % deps
+            except:
+                logging.exception("Failed to display seed %(module)s:%(method)s",
+                                  dict(module=seedArgs[0], method=seedArgs[1]))
