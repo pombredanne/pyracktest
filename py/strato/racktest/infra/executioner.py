@@ -101,15 +101,16 @@ class Executioner:
 
     def _testTimedOut(self):
         logging.error(
-            "Timeout: test is running for more than %(seconds)ds, calling 'onTimeout' and arming additional timer. "
+            "Timeout: test is running for more than %(seconds)ds, calling 'onTimeout' and arming "
+            " additional timer. "
             "You might need to increase the scenario ABORT_TEST_TIMEOUT", dict(seconds=self._testTimeout))
         timeoutthread.TimeoutThread(self._onTimeoutCallbackTimeout, self._killSelf)
         timeoutthread.TimeoutThread(self._onTimeoutCallbackTimeout + 5, self._killSelfHard)
         try:
             getattr(self._test, 'onTimeout', lambda: None)()
         except:
-            logging.exception(
-                "Failed 'onTimeout' callback for test in '%(filename)s', will commit suicide now", dict(filename=self._filename()))
+            logging.exception("Failed 'onTimeout' callback for test in '%(filename)s', commiting suicide.",
+                              dict(filename=self._filename()))
             suite.outputExceptionStackTrace()
         else:
             logging.info("'onTimeout' completed, will commit suicide now")
