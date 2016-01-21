@@ -5,6 +5,7 @@ from strato.racktest import hostundertest
 import strato.racktest.hostundertest.host
 from strato.whiteboxtest.infra import timeoutthread
 from strato.common.log import discardinglogger
+from detachednode import DetachedNode
 import os
 import signal
 import time
@@ -22,6 +23,7 @@ class Executioner:
 
     CREATE_NEW_ALLOCATION = None
     EXISTING_ALLOCATION_FILENAME = 'allocation.ID'
+    RUN_ON_DETACHED = os.getenv('RUN_ON_DETACHED', 'false').lower() == 'true'
 
     def __init__(self, klass):
         self._cleanUpMethods = []
@@ -51,12 +53,15 @@ class Executioner:
             self._test.hosts = self.hosts
         if not hasattr(self._test, 'releaseHost'):
             self._test.releaseHost = self._releaseHost
-        logging.progress("Allocating Nodes...")
-        self._allocation = rackattackallocation.RackAttackAllocation(
-            self._test.HOSTS, self._existingAllocationID)
-        timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
-        logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
-        logging.progress("Done allocating nodes.")
+        if not self.RUN_ON_DETACHED:
+            logging.progress("Allocating Nodes...")
+            self._allocation = rackattackallocation.RackAttackAllocation(
+                self._test.HOSTS, self._existingAllocationID)
+            timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
+            logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
+            logging.progress("Done allocating nodes.")
+        else:
+            logging.progress("Attempting connection to detached nodes...")
         try:
             self._setUp()
             try:
@@ -161,9 +166,31 @@ class Executioner:
         self._hosts[name] = host
         getattr(self._test, 'setUpHost', lambda x: x)(name)
 
+    def _setUpDetachedHosts(self):
+        detachedNodes = eval(open("nodes.conf", "r").read())
+        nodeList = detachedNodes.keys()
+        for name in nodeList:
+            node = DetachedNode(username=detachedNodes[name]['credentials']['username'],
+                                password=detachedNodes[name]['credentials']['password'],
+                                hostname=detachedNodes[name]['credentials']['hostname'],
+                                port=detachedNodes[name]['credentials']['port'],
+                                ipAddress=detachedNodes[name]['ipAddress'],
+                                nodeId=detachedNodes[name]['nodeId'])
+            host = hostundertest.host.Host(node, name)
+            self._hosts[name] = host
+            try:
+                host.ssh.waitForTCPServer()
+                host.ssh.connect()
+            except:
+                logging.error("Could not connect to detached servers")
+                raise
+
     def _setUp(self):
         logging.info("Setting up test in '%(filename)s'", dict(filename=self._filename()))
-        self._allocation.runOnEveryHost(self._setUpHost, "Setting up host")
+        if self.RUN_ON_DETACHED:
+            self._setUpDetachedHosts()
+        else:
+            self._allocation.runOnEveryHost(self._setUpHost, "Setting up host")
         try:
             getattr(self._test, 'setUp', lambda: None)()
         except:
