@@ -155,7 +155,7 @@ class Executioner:
                      dict(nodeName=name, server=node.id(), address=address))
         logging.debug("Full credentials of host: %(credentials)s", dict(credentials=credentials))
         try:
-            host.ssh.waitForTCPServer()
+            host.ssh.waitForTCPServer(timeout=2*60)
             host.ssh.connect()
         except:
             logging.error(
