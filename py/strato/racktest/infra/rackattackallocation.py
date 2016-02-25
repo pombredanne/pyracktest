@@ -51,12 +51,13 @@ class RackAttackAllocation:
             pool = None
             if "pool" in requirements:
                 pool = requirements["pool"]
+            serverIDWildcard = requirements.get("serverIDWildcard", "")
             rootfs = rootfslabel.RootfsLabel(requirements['rootfs'])
             hardwareConstraints = dict(requirements)
             del hardwareConstraints['rootfs']
             result[name] = api.Requirement(
                 imageLabel=rootfs.label(), imageHint=rootfs.imageHint(),
-                hardwareConstraints=hardwareConstraints, pool=pool)
+                hardwareConstraints=hardwareConstraints, pool=pool, serverIDWildcard=serverIDWildcard)
         return result
 
     def _rackattackAllocationInfo(self):
