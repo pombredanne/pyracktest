@@ -3,7 +3,6 @@ from rackattack import api
 from strato.racktest.infra import config
 import logging
 from strato.racktest.infra import concurrently
-from strato.racktest.infra import suite
 from strato.racktest.infra import rootfslabel
 import tempfile
 import os
@@ -34,15 +33,11 @@ class RackAttackAllocation:
             self._postMortemAllocation()
             raise
         self._nodes = self._allocation.nodes()
-        assert suite.runOnEveryHost is None
-        suite.runOnEveryHost = self.runOnEveryHost
 
     def nodes(self):
         return self._nodes
 
     def free(self):
-        assert suite.runOnEveryHost == self.runOnEveryHost
-        suite.runOnEveryHost = None
         self._allocation.free()
 
     def _rackattackRequirements(self):
