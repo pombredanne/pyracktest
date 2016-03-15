@@ -29,6 +29,8 @@ class Executioner:
 
     RACKATTACK_KEY = 'rackattack'
     DEFAULT_RACKATTACK = 'defaultRackattack'
+    MULTICLUSTER_ALLOCATION = 'multicluster'
+    DEFAULT_CLUSTER_NAME = 'cluster1'
 
     def __init__(self, klass):
         self._cleanUpMethods = []
@@ -39,14 +41,13 @@ class Executioner:
         self._onTimeoutCallbackTimeout = getattr(
             self._test, 'ON_TIMEOUT_CALLBACK_TIMEOUT', self.ON_TIMEOUT_CALLBACK_TIMEOUT_DEFAULT)
         self._doNotReleaseAllocation = os.getenv('KEEP_ALLOCATION', 'false').lower() in ['true']
-        # problematic... should only be allowed when connecting to specific allocation
+        # only use this when allocating single cluster
         self._existingAllocationID = self._setupExistingAllocation()
-        # dict in the form of {'clustername': {'allocation': allocation, 'hosts': {'hostname':hostUndertest}}}
-        # dict in the form of {'nodeName': 'clusterName'}, assumes all node name are unique
-        # dict in the form of {'clustername': {'node1':hostundertest, 'node2':hostundertest}}
         self._rackattackToHostMap, self._hostToRackattackMap = self._createRackattackHostMaps(self._test.HOSTS)
         self._hostToClusterMap = self._createHostToClusterMap(self._test.HOSTS)
         self._allocations = None
+        # backwards compatability
+        self._allocation = None
         self._clusters = dict()
 
     def host(self, name):
@@ -78,6 +79,9 @@ class Executioner:
 
             # go over all host definitions and create a map of rackattackToHostMap {rackattack: [host1, host2, host3]}
             self._allocations = self._createAllocations(self._rackattackToHostMap)
+            if len(self._allocations) == 1:
+                # classic mode, single cluster
+                self._allocation = self._allocations.values()[0]
             # self._allocation = rackattackallocation.RackAttackAllocation(
             #     self._test.HOSTS, self._existingAllocationID)
             timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
@@ -310,13 +314,24 @@ class Executioner:
         """
         create dict in the form {'nodeName': clusterName} assumes nodes in self._test.HOSTS have unique names
         """
+        # new type of HOSTS with multicluster
         hostToClusterMap = dict()
-        for clusterName, clusterHosts in CLUSTERS_DEFINITION.iteritems():
-            for name in clusterHosts.keys():
-                if hostToClusterMap.get(name):
-                    logging.error('node names must be unique')
-                    raise
-                hostToClusterMap[name] = clusterName
+        if CLUSTERS_DEFINITION.get(self.MULTICLUSTER_ALLOCATION, False):
+            for clusterName, clusterHosts in CLUSTERS_DEFINITION.iteritems():
+                if clusterName == self.MULTICLUSTER_ALLOCATION:
+                    continue
+                for name in clusterHosts.keys():
+                    if hostToClusterMap.get(name):
+                        logging.error('node names must be unique')
+                        raise
+                    hostToClusterMap[name] = clusterName
+        # old type of HOSTS without multicluster
+        else:
+            for name in CLUSTERS_DEFINITION.keys():
+                    if hostToClusterMap.get(name):
+                        logging.error('node names must be unique')
+                        raise
+                    hostToClusterMap[name] = self.DEFAULT_CLUSTER_NAME
         return hostToClusterMap
 
     def _createRackattackHostMaps(self, CLUSTERS_DEFINITION):
@@ -325,10 +340,24 @@ class Executioner:
         hostToRackAttackMap = {'node1': 'defaultrackattack', 'node2':'rainbowlab'}
         :return:
         """
+        # new type of HOSTS with multicluster
         rackattackToHostMap = dict()
         hostToRackAttackMap = dict()
-        for clusterName, clusterHosts in CLUSTERS_DEFINITION.iteritems():
-            for name, parameters in clusterHosts.iteritems():
+        if CLUSTERS_DEFINITION.get(self.MULTICLUSTER_ALLOCATION, False):
+            for clusterName, clusterHosts in CLUSTERS_DEFINITION.iteritems():
+                if clusterName == self.MULTICLUSTER_ALLOCATION:
+                    continue
+                for name, parameters in clusterHosts.iteritems():
+                    requiredRackattack = parameters.get(self.RACKATTACK_KEY, self.DEFAULT_RACKATTACK)
+                    hostToRackAttackMap[name] = requiredRackattack
+                    rackattackHosts = rackattackToHostMap.get(requiredRackattack)
+                    if not rackattackHosts:
+                        rackattackToHostMap[requiredRackattack] = dict()
+                    rackattackHosts = rackattackToHostMap.get(requiredRackattack)
+                    rackattackHosts.update({name: parameters})
+        # old type of HOSTS without multicluster
+        else:
+            for name, parameters in CLUSTERS_DEFINITION.iteritems():
                 requiredRackattack = parameters.get(self.RACKATTACK_KEY, self.DEFAULT_RACKATTACK)
                 hostToRackAttackMap[name] = requiredRackattack
                 rackattackHosts = rackattackToHostMap.get(requiredRackattack)
@@ -336,4 +365,5 @@ class Executioner:
                     rackattackToHostMap[requiredRackattack] = dict()
                 rackattackHosts = rackattackToHostMap.get(requiredRackattack)
                 rackattackHosts.update({name: parameters})
+
         return rackattackToHostMap, hostToRackAttackMap
