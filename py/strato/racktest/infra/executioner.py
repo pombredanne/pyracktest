@@ -23,8 +23,11 @@ class Executioner:
         'requests.packages.urllib3.connectionpool')
 
     CREATE_NEW_ALLOCATION = None
-    EXISTING_ALLOCATION_FILENAME = 'allocation.ID'
     RUN_ON_DETACHED = os.getenv('RUN_ON_DETACHED', 'false').lower() == 'true'
+
+    DEFAULT_RACKATTACK = 'defaultRackattack'
+    MULTICLUSTER_ALLOCATION = 'multicluster'
+    DEFAULT_CLUSTER_NAME = 'cluster1'
 
     def __init__(self, klass):
         self._cleanUpMethods = []
@@ -34,8 +37,8 @@ class Executioner:
         self._testTimeout = getattr(self._test, 'ABORT_TEST_TIMEOUT', self.ABORT_TEST_TIMEOUT_DEFAULT)
         self._onTimeoutCallbackTimeout = getattr(
             self._test, 'ON_TIMEOUT_CALLBACK_TIMEOUT', self.ON_TIMEOUT_CALLBACK_TIMEOUT_DEFAULT)
-        self._doNotReleaseAllocation = os.getenv('KEEP_ALLOCATION', 'false').lower() in ['true']
-        self._existingAllocationID = self._setupExistingAllocation()
+        self._hostToRackattackMap = self._createHostToRackattackMap(self._test.HOSTS)
+        self._allocations = None
 
     def host(self, name):
         return self._hosts[name]
@@ -55,12 +58,11 @@ class Executioner:
         if not hasattr(self._test, 'releaseHost'):
             self._test.releaseHost = self._releaseHost
         if not self.RUN_ON_DETACHED:
-            logging.progress("Allocating Nodes...")
-            self._allocation = rackattackallocation.RackAttackAllocation(
-                self._test.HOSTS, self._existingAllocationID)
+            logging.progress("Allocating hosts...")
+            self._allocations = self._createAllocations()
             timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
             logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
-            logging.progress("Done allocating nodes.")
+            logging.progress("Done allocating hosts.")
         else:
             logging.progress("Attempting connection to detached nodes...")
         try:
@@ -71,14 +73,19 @@ class Executioner:
                 self._tearDown()
         finally:
             self._cleanUp()
-            wasAllocationFreedSinceAllHostsWereReleased = not bool(self._hosts)
-            if not (wasAllocationFreedSinceAllHostsWereReleased or self._doNotReleaseAllocation):
-                try:
-                    self._allocation.free()
-                except:
-                    logging.exception("Unable to free allocation")
-            else:
-                logging.info('Not freeing allocation')
+            for allocation in self._allocations.values():
+                wasAllocationFreedSinceAllHostsWereReleased = not bool(allocation.nodes())
+                if not wasAllocationFreedSinceAllHostsWereReleased:
+                    try:
+                        self._tryFreeAllocation(allocation)
+                    except:
+                        logging.exception("Unable to free allocation, hosts: "
+                                          "%(_nodes)s may still be allocated",
+                                          dict(_nodes=','.join(
+                                              [node.id() for node in allocation.nodes().values()])))
+                        raise Exception('Unable to free allocation')
+                else:
+                    logging.info('Not freeing allocation')
 
     def _cleanUp(self):
         if not self._cleanUpMethods:
@@ -99,10 +106,11 @@ class Executioner:
         self._cleanUpMethods.append((callback, args, kwargs))
 
     def _releaseHost(self, name):
+        hostRackattack = self._hostToRackattackMap[name]
         if name not in self._hosts:
             logging.error("Cannot release host %(name)s since it's not allocated", dict(name=name))
             raise ValueError(name)
-        self._allocation.releaseHost(name)
+        self._allocations[hostRackattack].releaseHost(name)
         del self._hosts[name]
 
     def _testTimedOut(self):
@@ -147,15 +155,16 @@ class Executioner:
         return filename
 
     def _setUpHost(self, name):
-        node = self._allocation.nodes()[name]
+        hostRackattack = self._hostToRackattackMap[name]
+        node = self._allocations[hostRackattack].nodes()[name]
         host = hostundertest.host.Host(node, name)
         credentials = host.node.rootSSHCredentials()
         address = "%(hostname)s:%(port)s" % credentials
-        logging.info("Connecting to host '%(nodeName)s' (%(server)s, address: %(address)s)...",
-                     dict(nodeName=name, server=node.id(), address=address))
+        logging.info("Connecting to host '%(name)s' (%(server)s, address: %(address)s)...",
+                     dict(name=name, server=node.id(), address=address))
         logging.debug("Full credentials of host: %(credentials)s", dict(credentials=credentials))
         try:
-            host.ssh.waitForTCPServer(timeout=2*60)
+            host.ssh.waitForTCPServer(timeout=2 * 60)
             host.ssh.connect()
         except:
             logging.error(
@@ -192,7 +201,10 @@ class Executioner:
         if self.RUN_ON_DETACHED:
             self._setUpDetachedHosts()
         else:
-            self._allocation.runOnEveryHost(self._setUpHost, "Setting up host")
+            for allocation in self._allocations.values():
+                allocation.runOnEveryHost(self._setUpHost, "Setting up host")
+            if not hasattr(self._test, '_clusters'):
+                self._test._clusters = self._getClusters()
         try:
             getattr(self._test, 'setUp', lambda: None)()
         except:
@@ -229,26 +241,93 @@ class Executioner:
             suite.outputExceptionStackTrace()
             raise
         tearDownHost = getattr(self._test, 'tearDownHost', lambda x: x)
-        self._allocation.runOnEveryHost(tearDownHost, "Tearing down host")
+        for allocation in self._allocations.values():
+            allocation.runOnEveryHost(tearDownHost, "Tearing down host")
 
-    def _setupExistingAllocation(self):
-        existingAllocationID = os.getenv('ALLOCATION_ID', None)
-        if existingAllocationID == self.CREATE_NEW_ALLOCATION:
-            return self.CREATE_NEW_ALLOCATION
-        elif existingAllocationID == self.EXISTING_ALLOCATION_FILENAME:
-            return self._readAllocationFromFile(self.EXISTING_ALLOCATION_FILENAME)
+    def _createAllocations(self):
+        rackattackToHostMap = self._createRackattackToHostMap(self._test.HOSTS)
+        allocations = dict()
+        for rackattack, hostsFromRackattack in rackattackToHostMap.iteritems():
+            logging.progress('Allocating %(_hosts)s from Rackattack %(_rackattack)s', dict(
+                _hosts=hostsFromRackattack.keys(), _rackattack=rackattack))
+            try:
+                allocations[rackattack] = rackattackallocation.RackAttackAllocation(
+                    hosts=hostsFromRackattack)
+            except Exception as e:
+                logging.error('failed to allocate from %(_rackattack)s, '
+                              'freeing all allocations',
+                              dict(_rackattack=rackattack))
+                for allocation in allocations:
+                    self._tryFreeAllocation(allocation)
+                raise e
+            logging.progress(
+                'Finished allocating hosts from Rackattack %(_rackattack)s', dict(_rackattack=rackattack))
+        return allocations
+
+    def _getClusters(self):
+        clusters = dict()
+        hostToClusterMap = self._createHostToClusterMap(self._test.HOSTS)
+        for nodeName in self._hosts:
+            host = self._hosts[nodeName]
+            clusterName = hostToClusterMap[nodeName]
+            clusterHosts = clusters.setdefault(clusterName, {})
+            clusterHosts[nodeName] = host
+        return clusters
+
+    def _createHostToClusterMap(self, clustersDefinition):
+        hostToClusterMap = dict()
+        if clustersDefinition.get(self.MULTICLUSTER_ALLOCATION, False):
+            for clusterName, clusterHosts in clustersDefinition.iteritems():
+                if clusterName == self.MULTICLUSTER_ALLOCATION:
+                    continue
+                for name in clusterHosts:
+                    hostToClusterMap[name] = clusterName
         else:
-            return int(existingAllocationID)
+            [hostToClusterMap.setdefault(name, self.DEFAULT_CLUSTER_NAME)
+             for name in clustersDefinition]
+        return hostToClusterMap
 
-    def _readAllocationFromFile(self, filename):
-        allocationID = None
-        f = open(filename, 'r')
+    def _createRackattackToHostMap(self, clustersDefinition):
+        rackattackToHostMap = dict()
+        if clustersDefinition.get(self.MULTICLUSTER_ALLOCATION, False):
+            for clusterName, clusterHosts in clustersDefinition.iteritems():
+                if clusterName == self.MULTICLUSTER_ALLOCATION:
+                    continue
+                for name, parameters in clusterHosts.iteritems():
+                    requiredRackattack = parameters.get('rackattack', self.DEFAULT_RACKATTACK)
+                    rackattackHosts = rackattackToHostMap.setdefault(requiredRackattack, {})
+                    rackattackHosts[name] = parameters
+        else:
+            for name, parameters in clustersDefinition.iteritems():
+                requiredRackattack = parameters.get('rackattack', self.DEFAULT_RACKATTACK)
+                rackattackHosts = rackattackToHostMap.setdefault(requiredRackattack, {})
+
+                rackattackHosts[name] = parameters
+        return rackattackToHostMap
+
+    def _createHostToRackattackMap(self, clustersDefinition):
+        hostToRackAttackMap = dict()
+        if clustersDefinition.get(self.MULTICLUSTER_ALLOCATION, False):
+            for clusterName, clusterHosts in clustersDefinition.iteritems():
+                if clusterName == self.MULTICLUSTER_ALLOCATION:
+                    continue
+                for name, parameters in clusterHosts.iteritems():
+                    requiredRackattack = parameters.get('rackattack', self.DEFAULT_RACKATTACK)
+                    if name in hostToRackAttackMap:
+                        logging.error('node %(_nodeName)s appears more than once', dict(_nodeName=name))
+                        raise Exception('node names must be unique')
+                    hostToRackAttackMap[name] = requiredRackattack
+        else:
+            for name, parameters in clustersDefinition.iteritems():
+                requiredRackattack = parameters.get('rackattack', self.DEFAULT_RACKATTACK)
+                hostToRackAttackMap[name] = requiredRackattack
+        return hostToRackAttackMap
+
+    def _tryFreeAllocation(self, allocation):
         try:
-            allocationID = int(f.readlines()[0])
-        except Exception as e:
-            logging.error('failed to fetch allocationID from %(_filename)s. Exception %(_err)s', dict(
-                _filename=filename, _err=e.message))
-            raise e
-        finally:
-            f.close()
-        return allocationID
+            allocation.free()
+        except:
+            logging.exception("Unable to free allocation, hosts: "
+                              "%(_nodes)s may still be allocated",
+                              dict(_nodes=','.join(
+                                  [node.id() for node in allocation.nodes().values()])))
