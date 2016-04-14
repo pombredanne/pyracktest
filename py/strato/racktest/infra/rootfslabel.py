@@ -4,11 +4,12 @@ import subprocess
 
 
 class RootfsLabel:
-    def __init__(self, rootfs):
+    def __init__(self, rootfs, product="rootfs"):
         self._rootfs = rootfs
+        self._product = product
         if rootfs == "THIS":
             self._label = run.run([
-                "solvent", "printlabel", "--thisProject", "--product=rootfs"]).strip()
+                "solvent", "printlabel", "--thisProject", "--product=%s" % (self._product,)]).strip()
             wrapper = gitwrapper.GitWrapper(".")
             self._hint = wrapper.originURLBasename()
         elif self._labelExists(self._rootfs):
@@ -21,7 +22,8 @@ class RootfsLabel:
             self._hint = repository
         else:
             self._label = run.run([
-                "solvent", "printlabel", "--repositoryBasename", rootfs, "--product=rootfs"]).strip()
+                "solvent", "printlabel", "--repositoryBasename", rootfs,
+                "--product=%s" % (self._product,)]).strip()
             self._hint = rootfs
 
     def label(self):
