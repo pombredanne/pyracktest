@@ -176,30 +176,34 @@ class Executioner:
         self._hosts[name] = host
         getattr(self._test, 'setUpHost', lambda x: x)(name)
 
-    def _setUpDetachedHosts(self):
-        with open("nodes.conf", "r") as confFile:
-            detachedNodes = yaml.load(confFile)
-        nodeList = detachedNodes.keys()
-        for name in nodeList:
-            node = DetachedNode(username=detachedNodes[name]['credentials']['username'],
-                                password=detachedNodes[name]['credentials']['password'],
-                                hostname=detachedNodes[name]['credentials']['hostname'],
-                                port=detachedNodes[name]['credentials']['port'],
-                                ipAddress=detachedNodes[name]['ipAddress'],
-                                nodeId=detachedNodes[name]['nodeId'])
-            host = hostundertest.host.Host(node, name)
-            self._hosts[name] = host
-            try:
-                host.ssh.waitForTCPServer()
-                host.ssh.connect()
-            except:
-                logging.error("Could not connect to detached servers")
-                raise
+    def _setUpDetachedClusters(self):
+        with open("clusters.conf", "r") as confFile:
+            detachedClusters = yaml.load(confFile)
+        clusters = {}
+        for clusterName in detachedClusters.keys():
+            clusters[clusterName] = {}
+            for nodeName, nodeInfo in detachedClusters[clusterName]['nodes'].iteritems():
+                node = DetachedNode(username=nodeInfo['credentials']['username'],
+                                    password=nodeInfo['credentials']['password'],
+                                    hostname=nodeInfo['credentials']['hostname'],
+                                    port=nodeInfo['credentials']['port'],
+                                    ipAddress=nodeInfo['ipAddress'],
+                                    nodeId=nodeInfo['nodeId'])
+                host = hostundertest.host.Host(node, nodeName)
+                self._hosts[nodeName] = host
+                try:
+                    host.ssh.waitForTCPServer()
+                    host.ssh.connect()
+                except:
+                    logging.error("Could not connect to detached servers")
+                    raise
+                clusters[clusterName][nodeName] = host
+        return clusters
 
     def _setUp(self):
         logging.info("Setting up test in '%(filename)s'", dict(filename=self._filename()))
         if self.RUN_ON_DETACHED:
-            self._setUpDetachedHosts()
+            self._test._clusters = self._setUpDetachedClusters()
         else:
             for allocation in self._allocations.values():
                 allocation.runOnEveryHost(self._setUpHost, "Setting up host")
