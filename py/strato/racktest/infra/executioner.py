@@ -199,6 +199,7 @@ class Executioner:
         return clusters
 
     def _setUp(self):
+        error = 1 / 0
         logging.info("Setting up test in '%(filename)s'", dict(filename=self._filename()))
         if self.RUN_ON_DETACHED:
             self._test._clusters = self._setUpDetachedClusters()
