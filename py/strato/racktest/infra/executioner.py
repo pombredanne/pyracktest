@@ -67,11 +67,9 @@ class Executioner:
             logging.progress("Attempting connection to detached nodes...")
         try:
             self._setUp()
-            try:
-                self._run()
-            finally:
-                self._tearDown()
+            self._run()
         finally:
+            self._tearDown()
             self._cleanUp()
             for allocation in self._allocations.values():
                 wasAllocationFreedSinceAllHostsWereReleased = not bool(allocation.nodes())
