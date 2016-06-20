@@ -25,25 +25,24 @@ _defaultReport = os.path.join(config.TEST_LOGS_DIR, "racktestrunnerreport.json")
 _defaultLiveReport = os.path.join(config.TEST_LOGS_DIR, "racktestrunnerlivereport.json")
 _single = os.path.join(os.path.dirname(runner.__file__), "single.py")
 
-parser = argparse.ArgumentParser(
-    description="run Integration test scenarios. If no arguments given, run all rack scenarios")
-parser.add_argument(
-    "--interactOnAssert", help="go into interact mode on assert", action='store_true')
-parser.add_argument("--regex", default="", help="run all scenarios matching the regular expression")
-parser.add_argument('--listOnly', action='store_true', help='list scenarios and exit')
-parser.add_argument('--liveReportFilename', default=_defaultLiveReport)
-parser.add_argument("--reportFilename", default=_defaultReport)
-parser.add_argument("--scenariosRoot", default="racktests")
-parser.add_argument("--configurationFile", default="/etc/racktest.conf")
-parser.add_argument("--parallel", type=int, default=0)
-parser.add_argument("--repeat", type=int, default=0)
-args = parser.parse_args()
-if args.interactOnAssert:
-    suite.enableInteractOnAssert()
-config.load(args.configurationFile)
+
+def parseArgs():
+    parser = argparse.ArgumentParser(
+        description="run Integration test scenarios. If no arguments given, run all rack scenarios")
+    parser.add_argument(
+        "--interactOnAssert", help="go into interact mode on assert", action='store_true')
+    parser.add_argument("--regex", default="", help="run all scenarios matching the regular expression")
+    parser.add_argument('--listOnly', action='store_true', help='list scenarios and exit')
+    parser.add_argument('--liveReportFilename', default=_defaultLiveReport)
+    parser.add_argument("--reportFilename", default=_defaultReport)
+    parser.add_argument("--scenariosRoot", default="racktests")
+    parser.add_argument("--configurationFile", default="/etc/racktest.conf")
+    parser.add_argument("--parallel", type=int, default=0)
+    parser.add_argument("--repeat", type=int, default=0)
+    return parser.parse_args()
 
 
-class Runner:
+class Runner(object):
     def __init__(self, args):
         self._args = args
         self._liveReportLock = threading.Lock()
@@ -123,7 +122,7 @@ class Runner:
     def _runScenario(self, scenario, instance):
         before = time.time()
         popen = subprocess.Popen(
-            ['python', _single, args.configurationFile, scenario, instance], close_fds=True)
+            ['python', _single, self._args.configurationFile, scenario, instance], close_fds=True)
         self._pids.append(popen.pid)
         result = popen.wait()
         self._pids.remove(popen.pid)
@@ -133,22 +132,31 @@ class Runner:
         self._dumpLiveReport()
 
 
-runner = Runner(args)
-if args.listOnly:
-    runner.printScenarios()
-    sys.exit(0)
-if args.parallel:
-    runner.runParallel()
-else:
-    runner.runSequential()
-runner.writeReport()
-if runner.passedCount() < runner.total():
-    logging.error(
-        "%(failed)d tests Failed. %(passed)d/%(total)d Passed",
-        dict(failed=runner.failedCount(), passed=runner.passedCount(), total=runner.total()))
-    for scenario in runner.failed():
-        logging.error("Failed scenario: %(scenario)s", dict(scenario=scenario))
-    sys.exit(1)
-else:
-    logging.success(
-        "Tests Passed: %(passed)d/%(total)d", dict(passed=runner.passedCount(), total=runner.total()))
+def main():
+    args = parseArgs()
+    if args.interactOnAssert:
+        suite.enableInteractOnAssert()
+    config.load(args.configurationFile)
+    runner = Runner(args)
+    if args.listOnly:
+        runner.printScenarios()
+        sys.exit(0)
+    if args.parallel:
+        runner.runParallel()
+    else:
+        runner.runSequential()
+    runner.writeReport()
+    if runner.passedCount() < runner.total():
+        logging.error(
+            "%(failed)d tests Failed. %(passed)d/%(total)d Passed",
+            dict(failed=runner.failedCount(), passed=runner.passedCount(), total=runner.total()))
+        for scenario in runner.failed():
+            logging.error("Failed scenario: %(scenario)s", dict(scenario=scenario))
+        sys.exit(1)
+    else:
+        logging.success(
+            "Tests Passed: %(passed)d/%(total)d", dict(passed=runner.passedCount(), total=runner.total()))
+
+
+if __main__ == "__main__":
+    main()
