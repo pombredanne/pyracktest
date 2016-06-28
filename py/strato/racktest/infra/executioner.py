@@ -22,8 +22,7 @@ class Executioner:
         'selenium.webdriver.remote.remote_connection',
         'requests.packages.urllib3.connectionpool')
 
-    CREATE_NEW_ALLOCATION = None
-    RUN_ON_DETACHED = os.getenv('RUN_ON_DETACHED', 'false').lower() == 'true'
+    RUN_ON_PREALLOCATED = os.getenv('RUN_ON_PREALLOCATED', 'false').lower() == 'true'
 
     DEFAULT_RACKATTACK = 'defaultRackattack'
     MULTICLUSTER_ALLOCATION = 'multicluster'
@@ -57,33 +56,41 @@ class Executioner:
             self._test.hosts = self.hosts
         if not hasattr(self._test, 'releaseHost'):
             self._test.releaseHost = self._releaseHost
-        if not self.RUN_ON_DETACHED:
+        if not self.RUN_ON_PREALLOCATED:
             logging.progress("Allocating hosts...")
             self._allocations = self._createAllocations()
             timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
             logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
             logging.progress("Done allocating hosts.")
+
+            for allocation in self._allocations.values():
+                allocation.runOnEveryHost(self._setUpHost, "Setting up host")
+            if not hasattr(self._test, '_clusters'):
+                self._test._clusters = self._getClusters()
         else:
-            logging.progress("Attempting connection to detached nodes...")
+            logging.progress("Attempting connection to pre-allocated nodes...")
+            self._test._clusters = self._setUpDetachedClusters()
+
         try:
             self._setUp()
             self._run()
         finally:
             self._tearDown()
-            self._cleanUp()
-            for allocation in self._allocations.values():
-                wasAllocationFreedSinceAllHostsWereReleased = not bool(allocation.nodes())
-                if not wasAllocationFreedSinceAllHostsWereReleased:
-                    try:
-                        self._tryFreeAllocation(allocation)
-                    except:
-                        logging.exception("Unable to free allocation, hosts: "
-                                          "%(_nodes)s may still be allocated",
-                                          dict(_nodes=','.join(
-                                              [node.id() for node in allocation.nodes().values()])))
-                        raise Exception('Unable to free allocation')
-                else:
-                    logging.info('Not freeing allocation')
+            if not self.RUN_ON_PREALLOCATED:
+                self._cleanUp()
+                for allocation in self._allocations.values():
+                    wasAllocationFreedSinceAllHostsWereReleased = not bool(allocation.nodes())
+                    if not wasAllocationFreedSinceAllHostsWereReleased:
+                        try:
+                            self._tryFreeAllocation(allocation)
+                        except:
+                            logging.exception("Unable to free allocation, hosts: "
+                                              "%(_nodes)s may still be allocated",
+                                              dict(_nodes=','.join(
+                                                  [node.id() for node in allocation.nodes().values()])))
+                            raise Exception('Unable to free allocation')
+                    else:
+                        logging.info('Not freeing allocation')
 
     def _cleanUp(self):
         if not self._cleanUpMethods:
@@ -200,13 +207,6 @@ class Executioner:
 
     def _setUp(self):
         logging.info("Setting up test in '%(filename)s'", dict(filename=self._filename()))
-        if self.RUN_ON_DETACHED:
-            self._test._clusters = self._setUpDetachedClusters()
-        else:
-            for allocation in self._allocations.values():
-                allocation.runOnEveryHost(self._setUpHost, "Setting up host")
-            if not hasattr(self._test, '_clusters'):
-                self._test._clusters = self._getClusters()
         try:
             getattr(self._test, 'setUp', lambda: None)()
         except:
@@ -242,6 +242,8 @@ class Executioner:
                 "Failed tearing down test in '%(filename)s'", dict(filename=self._filename()))
             suite.outputExceptionStackTrace()
             raise
+        if self.RUN_ON_PREALLOCATED:
+            return
         tearDownHost = getattr(self._test, 'tearDownHost', lambda x: x)
         for allocation in self._allocations.values():
             allocation.runOnEveryHost(tearDownHost, "Tearing down host")
