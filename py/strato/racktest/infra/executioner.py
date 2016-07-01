@@ -29,11 +29,12 @@ class Executioner:
     MULTICLUSTER_ALLOCATION = 'multicluster'
     DEFAULT_CLUSTER_NAME = 'cluster1'
 
-    def __init__(self, klass):
+    def __init__(self, klass, clusterConfFilePath=None):
         self._cleanUpMethods = []
         if not hasattr(klass, 'addCleanup'):
             klass.addCleanup = self._addCleanup
         self._test = klass()
+        self._test.CLUSTERS_CONF_FILE = clusterConfFilePath or "cluster.conf"
         self._testTimeout = getattr(self._test, 'ABORT_TEST_TIMEOUT', self.ABORT_TEST_TIMEOUT_DEFAULT)
         self._onTimeoutCallbackTimeout = getattr(
             self._test, 'ON_TIMEOUT_CALLBACK_TIMEOUT', self.ON_TIMEOUT_CALLBACK_TIMEOUT_DEFAULT)
@@ -175,7 +176,7 @@ class Executioner:
         getattr(self._test, 'setUpHost', lambda x: x)(name)
 
     def _setUpDetachedClusters(self):
-        with open("clusters.conf", "r") as confFile:
+        with open(self._test.CLUSTERS_CONF_FILE, "r") as confFile:
             detachedClusters = yaml.load(confFile)
         clusters = {}
         for clusterName in detachedClusters.keys():
