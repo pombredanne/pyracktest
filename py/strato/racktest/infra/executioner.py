@@ -11,6 +11,7 @@ import signal
 import time
 import yaml
 import sys
+import json
 
 
 class Executioner:
@@ -22,22 +23,22 @@ class Executioner:
         'selenium.webdriver.remote.remote_connection',
         'requests.packages.urllib3.connectionpool')
 
-    RUN_ON_PREALLOCATED = os.getenv('RUN_ON_PREALLOCATED', 'false').lower() == 'true'
-
     DEFAULT_RACKATTACK = 'defaultRackattack'
     MULTICLUSTER_ALLOCATION = 'multicluster'
     DEFAULT_CLUSTER_NAME = 'cluster1'
 
-    def __init__(self, klass):
+    def __init__(self, klass, testRunAttributes=None):
         self._cleanUpMethods = []
         if not hasattr(klass, 'addCleanup'):
             klass.addCleanup = self._addCleanup
+        self._setTestAttributes(klass, testRunAttributes)
         self._test = klass()
         self._testTimeout = getattr(self._test, 'ABORT_TEST_TIMEOUT', self.ABORT_TEST_TIMEOUT_DEFAULT)
         self._onTimeoutCallbackTimeout = getattr(
             self._test, 'ON_TIMEOUT_CALLBACK_TIMEOUT', self.ON_TIMEOUT_CALLBACK_TIMEOUT_DEFAULT)
         self._hostToRackattackMap = self._createHostToRackattackMap(self._test.HOSTS)
         self._allocations = None
+        self._runTestOnPreAllocated = hasattr(self._test, 'RUN_ON_PREALLOCATED') and self._test.RUN_ON_PREALLOCATED
 
     def host(self, name):
         return self._hosts[name]
@@ -56,11 +57,11 @@ class Executioner:
             self._test.hosts = self.hosts
         if not hasattr(self._test, 'releaseHost'):
             self._test.releaseHost = self._releaseHost
-        if not self.RUN_ON_PREALLOCATED:
+        timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
+        logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
+        if not self._runTestOnPreAllocated:
             logging.progress("Allocating hosts...")
             self._allocations = self._createAllocations()
-            timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
-            logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
             logging.progress("Done allocating hosts.")
 
             for allocation in self._allocations.values():
@@ -76,7 +77,7 @@ class Executioner:
             self._run()
         finally:
             self._tearDown()
-            if not self.RUN_ON_PREALLOCATED:
+            if not self._runTestOnPreAllocated:
                 self._cleanUp()
                 for allocation in self._allocations.values():
                     wasAllocationFreedSinceAllHostsWereReleased = not bool(allocation.nodes())
@@ -182,7 +183,7 @@ class Executioner:
         getattr(self._test, 'setUpHost', lambda x: x)(name)
 
     def _setUpDetachedClusters(self):
-        with open("clusters.conf", "r") as confFile:
+        with open(self._test.CLUSTERS_CONF_FILE, "r") as confFile:
             detachedClusters = yaml.load(confFile)
         clusters = {}
         for clusterName in detachedClusters.keys():
@@ -242,7 +243,7 @@ class Executioner:
                 "Failed tearing down test in '%(filename)s'", dict(filename=self._filename()))
             suite.outputExceptionStackTrace()
             raise
-        if self.RUN_ON_PREALLOCATED:
+        if self._runTestOnPreAllocated:
             return
         tearDownHost = getattr(self._test, 'tearDownHost', lambda x: x)
         for allocation in self._allocations.values():
@@ -335,3 +336,12 @@ class Executioner:
                               "%(_nodes)s may still be allocated",
                               dict(_nodes=','.join(
                                   [node.id() for node in allocation.nodes().values()])))
+
+    def _setTestAttributes(self, klass, jsonWithAttrs):
+        logging.info("Setting test attributes")
+        try:
+            if jsonWithAttrs and len(jsonWithAttrs) > 0:
+                for key, value in json.loads(jsonWithAttrs).iteritems():
+                    setattr(klass, key, value)
+        except Exception as e:
+            logging.exception(e)
