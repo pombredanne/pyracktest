@@ -9,14 +9,14 @@ from strato.common import log
 import imp
 
 
-def runSingleScenario(scenarioFilename, instance, preallocatedClusterConf=None):
+def runSingleScenario(scenarioFilename, instance, testRunAttributes=None):
     testName = os.path.splitext(scenarioFilename)[0].replace('/', '.')
     _configureTestLogging(testName + instance)
     logging.info("Running '%(scenarioFilename)s' as a test class (instance='%(instance)s')", dict(
         scenarioFilename=scenarioFilename, instance=instance))
     try:
         module = imp.load_source('test', scenarioFilename)
-        execute = executioner.Executioner(module.Test, preallocatedClusterConf)
+        execute = executioner.Executioner(module.Test, testRunAttributes)
         execute.executeTestScenario()
     except:
         logging.exception(
@@ -42,7 +42,8 @@ if __name__ == "__main__":
     parser.add_argument("configurationFile", help="configuration file")
     parser.add_argument("scenarioFilename", help="run given scenario file")
     parser.add_argument("instance", default="", help="test instance")
-    parser.add_argument("--preallocatedClusterConf", default=None, help="cluster configuration file to run on preallocated")
+    parser.add_argument("--testRunAttributes", default=None, help="json string with test attributes that will be set "
+                                                                  "before test initialization in executioner")
     args = parser.parse_args()
     config.load(args.configurationFile)
-    runSingleScenario(args.scenarioFilename, args.instance, args.preallocatedClusterConf)
+    runSingleScenario(args.scenarioFilename, args.instance, args.testRunAttributes)
