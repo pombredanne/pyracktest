@@ -194,7 +194,9 @@ class Executioner:
                                     hostname=nodeInfo['credentials']['hostname'],
                                     port=nodeInfo['credentials']['port'],
                                     ipAddress=nodeInfo['ipAddress'],
-                                    nodeId=nodeInfo['nodeId'])
+                                    nodeId=nodeInfo['nodeId'],
+                                    info=nodeInfo["networkInfo"]
+                                    )
                 host = hostundertest.host.Host(node, nodeName)
                 self._hosts[nodeName] = host
                 try:
