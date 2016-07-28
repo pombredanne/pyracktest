@@ -57,11 +57,11 @@ class Executioner:
             self._test.hosts = self.hosts
         if not hasattr(self._test, 'releaseHost'):
             self._test.releaseHost = self._releaseHost
+        timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
+        logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
         if not self._runTestOnPreAllocated:
             logging.progress("Allocating hosts...")
             self._allocations = self._createAllocations()
-            timeoutthread.TimeoutThread(self._testTimeout, self._testTimedOut)
-            logging.info("Test timer armed. Timeout in %(seconds)d seconds", dict(seconds=self._testTimeout))
             logging.progress("Done allocating hosts.")
 
             for allocation in self._allocations.values():
@@ -340,6 +340,7 @@ class Executioner:
                                   [node.id() for node in allocation.nodes().values()])))
 
     def _setTestAttributes(self, klass, jsonWithAttrs):
+        logging.info("Setting test attributes")
         try:
             if jsonWithAttrs and len(jsonWithAttrs) > 0:
                 for key, value in json.loads(jsonWithAttrs).iteritems():
