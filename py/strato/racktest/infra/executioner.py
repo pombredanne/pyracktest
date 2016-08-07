@@ -255,13 +255,13 @@ class Executioner:
             try:
                 allocations[rackattack] = rackattackallocation.RackAttackAllocation(
                     hosts=hostsFromRackattack)
-            except Exception as e:
+            except Exception:
                 logging.error('failed to allocate from %(_rackattack)s, '
                               'freeing all allocations',
                               dict(_rackattack=rackattack))
                 for allocation in allocations:
                     self._tryFreeAllocation(allocation)
-                raise e
+                raise
             logging.progress(
                 'Finished allocating hosts from Rackattack %(_rackattack)s', dict(_rackattack=rackattack))
         return allocations
