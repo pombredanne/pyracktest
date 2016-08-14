@@ -7,6 +7,31 @@ import shutil
 import argparse
 from strato.common import log
 import imp
+import sys
+import atexit
+import psutil
+
+
+def _safelyKillProcess(process):
+    try:
+        if process.is_running():
+            process.kill()
+    except:
+        logging.debug("Couldn't kill process %s", process.pid)
+
+
+def killSubprocesses(pid=None, killGivenProcess=False):
+    try:
+        pid = pid or os.getpid()
+        process = psutil.Process(pid)
+        children = process.children(recursive=True)
+        logging.debug("Children pids list %s", children)
+        for son in children:
+            _safelyKillProcess(son)
+        if killGivenProcess and process.pid > 1:
+            _safelyKillProcess(process)
+    except Exception as e:
+        logging.exception(e)
 
 
 def runSingleScenario(scenarioFilename, instance, testRunAttributes=None):
@@ -22,13 +47,11 @@ def runSingleScenario(scenarioFilename, instance, testRunAttributes=None):
         logging.exception(
             "Failed running '%(scenarioFilename)s' as a test class (instance='%(instance)s')",
             dict(scenarioFilename=scenarioFilename, instance=instance))
-        logging.shutdown()
         raise
     finally:
         logging.info(
             "Done Running '%(scenarioFilename)s' as a test class (instance='%(instance)s')",
             dict(scenarioFilename=scenarioFilename, instance=instance))
-        logging.shutdown()
 
 
 def _configureTestLogging(testName):
@@ -38,6 +61,7 @@ def _configureTestLogging(testName):
 
 
 if __name__ == "__main__":
+    atexit.register(killSubprocesses)
     parser = argparse.ArgumentParser(description="Run single test scenarion")
     parser.add_argument("configurationFile", help="configuration file")
     parser.add_argument("scenarioFilename", help="run given scenario file")
@@ -45,5 +69,12 @@ if __name__ == "__main__":
     parser.add_argument("--testRunAttributes", default=None, help="json string with test attributes that will be set "
                                                                   "before test initialization in executioner")
     args = parser.parse_args()
-    config.load(args.configurationFile)
-    runSingleScenario(args.scenarioFilename, args.instance, args.testRunAttributes)
+    returnCode = 0
+    try:
+        config.load(args.configurationFile)
+        runSingleScenario(args.scenarioFilename, args.instance, args.testRunAttributes)
+    except:
+        returnCode = 1
+
+    logging.info("Finished running %s with returnCode %s", args.scenarioFilename, returnCode)
+    sys.exit(returnCode)
