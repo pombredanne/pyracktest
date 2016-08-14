@@ -22,13 +22,11 @@ def runSingleScenario(scenarioFilename, instance, testRunAttributes=None):
         logging.exception(
             "Failed running '%(scenarioFilename)s' as a test class (instance='%(instance)s')",
             dict(scenarioFilename=scenarioFilename, instance=instance))
-        logging.shutdown()
         raise
     finally:
         logging.info(
             "Done Running '%(scenarioFilename)s' as a test class (instance='%(instance)s')",
             dict(scenarioFilename=scenarioFilename, instance=instance))
-        logging.shutdown()
 
 
 def _configureTestLogging(testName):
