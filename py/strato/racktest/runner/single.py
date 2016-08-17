@@ -7,6 +7,7 @@ import shutil
 import argparse
 from strato.common import log
 import imp
+import sys
 
 
 def runSingleScenario(scenarioFilename, instance, testRunAttributes=None):
@@ -43,5 +44,12 @@ if __name__ == "__main__":
     parser.add_argument("--testRunAttributes", default=None, help="json string with test attributes that will be set "
                                                                   "before test initialization in executioner")
     args = parser.parse_args()
-    config.load(args.configurationFile)
-    runSingleScenario(args.scenarioFilename, args.instance, args.testRunAttributes)
+    returnCode = 0
+    try:
+        config.load(args.configurationFile)
+        runSingleScenario(args.scenarioFilename, args.instance, args.testRunAttributes)
+    except:
+        returnCode = 1
+
+    logging.info("Finished running %s with returnCode %s", args.scenarioFilename, returnCode)
+    sys.exit(returnCode)
