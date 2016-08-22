@@ -35,6 +35,8 @@ class Executioner:
             klass.addCleanup = self._addCleanup
         self._test = klass()
         self._testTimeout = getattr(self._test, 'ABORT_TEST_TIMEOUT', self.ABORT_TEST_TIMEOUT_DEFAULT)
+        logging.warning("SI-470 workaround: Implicitly adding 15 minutes to test timeout")
+        self._testTimeout += 15 * 60
         self._onTimeoutCallbackTimeout = getattr(
             self._test, 'ON_TIMEOUT_CALLBACK_TIMEOUT', self.ON_TIMEOUT_CALLBACK_TIMEOUT_DEFAULT)
         self._hostToRackattackMap = self._createHostToRackattackMap(self._test.HOSTS)
