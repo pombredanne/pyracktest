@@ -11,15 +11,12 @@ def _safelyKillProcess(process):
         logging.debug("Couldn't kill process %s", process.pid)
 
 
-def killSubprocesses(pid=None, killGivenProcess=False):
-    try:
-        pid = pid or os.getpid()
-        process = psutil.Process(pid)
-        children = process.children(recursive=True)
-        logging.debug("Children pids list %s", children)
+def killSubprocesses(pid=None):
+    pid = pid or os.getpid()
+    process = psutil.Process(pid)
+    children = process.children(recursive=True)
+    if children:
+        logging.debug("Killing children...")
         for son in children:
             _safelyKillProcess(son)
-        if killGivenProcess and process.pid > 1:
-            _safelyKillProcess(process)
-    except Exception as e:
-        logging.exception(e)
+        logging.debug("Done killing children.")
