@@ -9,29 +9,7 @@ from strato.common import log
 import imp
 import sys
 import atexit
-import psutil
-
-
-def _safelyKillProcess(process):
-    try:
-        if process.is_running():
-            process.kill()
-    except:
-        logging.debug("Couldn't kill process %s", process.pid)
-
-
-def killSubprocesses(pid=None, killGivenProcess=False):
-    try:
-        pid = pid or os.getpid()
-        process = psutil.Process(pid)
-        children = process.children(recursive=True)
-        logging.debug("Children pids list %s", children)
-        for son in children:
-            _safelyKillProcess(son)
-        if killGivenProcess and process.pid > 1:
-            _safelyKillProcess(process)
-    except Exception as e:
-        logging.exception(e)
+from strato.racktest.infra import handleexit
 
 
 def runSingleScenario(scenarioFilename, instance, testRunAttributes=None):
@@ -61,7 +39,7 @@ def _configureTestLogging(testName):
 
 
 if __name__ == "__main__":
-    atexit.register(killSubprocesses)
+    atexit.register(handleexit.killSubprocesses)
     parser = argparse.ArgumentParser(description="Run single test scenarion")
     parser.add_argument("configurationFile", help="configuration file")
     parser.add_argument("scenarioFilename", help="run given scenario file")
