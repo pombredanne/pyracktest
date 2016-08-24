@@ -47,12 +47,10 @@ if __name__ == "__main__":
     parser.add_argument("--testRunAttributes", default=None, help="json string with test attributes that will be set "
                                                                   "before test initialization in executioner")
     args = parser.parse_args()
-    returnCode = 0
     try:
         config.load(args.configurationFile)
         runSingleScenario(args.scenarioFilename, args.instance, args.testRunAttributes)
+        logging.debug("Finished running %s: SUCCESS.", args.scenarioFilename)
     except:
-        returnCode = 1
-
-    logging.info("Finished running %s with returnCode %s", args.scenarioFilename, returnCode)
-    sys.exit(returnCode)
+        logging.debug("Finished running %s: FAILURE", args.scenarioFilename)
+        raise

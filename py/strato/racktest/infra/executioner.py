@@ -63,15 +63,6 @@ class Executioner:
             logging.progress("Allocating hosts...")
             self._allocations = self._createAllocations()
             logging.progress("Done allocating hosts.")
-
-            for allocation in self._allocations.values():
-                allocation.runOnEveryHost(self._setUpHost, "Setting up host")
-            if not hasattr(self._test, '_clusters'):
-                self._test._clusters = self._getClusters()
-        else:
-            logging.progress("Attempting connection to pre-allocated nodes...")
-            self._test._clusters = self._setUpDetachedClusters()
-
         try:
             self._setUp()
             self._run()
@@ -79,19 +70,22 @@ class Executioner:
             self._tearDown()
             if not self._runTestOnPreAllocated:
                 self._cleanUp()
-                for allocation in self._allocations.values():
-                    wasAllocationFreedSinceAllHostsWereReleased = not bool(allocation.nodes())
-                    if not wasAllocationFreedSinceAllHostsWereReleased:
-                        try:
-                            self._tryFreeAllocation(allocation)
-                        except:
-                            logging.exception("Unable to free allocation, hosts: "
-                                              "%(_nodes)s may still be allocated",
-                                              dict(_nodes=','.join(
-                                                  [node.id() for node in allocation.nodes().values()])))
-                            raise Exception('Unable to free allocation')
-                    else:
-                        logging.info('Not freeing allocation')
+                self._freeAllocationsIfNeeded()
+
+    def _freeAllocationsIfNeeded(self):
+        for allocation in self._allocations.values():
+            wasAllocationFreedSinceAllHostsWereReleased = not bool(allocation.nodes())
+            if not wasAllocationFreedSinceAllHostsWereReleased:
+                try:
+                    self._tryFreeAllocation(allocation)
+                except:
+                    logging.exception("Unable to free allocation, hosts: "
+                                        "%(_nodes)s may still be allocated",
+                                        dict(_nodes=','.join(
+                                            [node.id() for node in allocation.nodes().values()])))
+                    raise Exception('Unable to free allocation')
+            else:
+                logging.info('Not freeing allocation')
 
     def _cleanUp(self):
         if not self._cleanUpMethods:
@@ -210,6 +204,14 @@ class Executioner:
 
     def _setUp(self):
         logging.info("Setting up test in '%(filename)s'", dict(filename=self._filename()))
+        if not self._runTestOnPreAllocated:
+            for allocation in self._allocations.values():
+                allocation.runOnEveryHost(self._setUpHost, "Setting up host")
+            if not hasattr(self._test, '_clusters'):
+                self._test._clusters = self._getClusters()
+        else:
+            logging.progress("Attempting connection to pre-allocated nodes...")
+            self._test._clusters = self._setUpDetachedClusters()
         try:
             getattr(self._test, 'setUp', lambda: None)()
         except:
@@ -340,10 +342,7 @@ class Executioner:
                                   [node.id() for node in allocation.nodes().values()])))
 
     def _setTestAttributes(self, klass, jsonWithAttrs):
-        logging.info("Setting test attributes")
-        try:
-            if jsonWithAttrs and len(jsonWithAttrs) > 0:
-                for key, value in json.loads(jsonWithAttrs).iteritems():
-                    setattr(klass, key, value)
-        except Exception as e:
-            logging.exception(e)
+        if jsonWithAttrs is not None:
+            jsonContent = json.loads(jsonWithAttrs)
+            for key, value in json.loads(jsonWithAttrs).iteritems():
+                setattr(klass, key, value)
