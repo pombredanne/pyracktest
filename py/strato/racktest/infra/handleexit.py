@@ -1,5 +1,4 @@
 import psutil
-import logging
 import os
 import threading
 import inspect
@@ -10,19 +9,20 @@ def _safelyKillProcess(process):
         if process.is_running():
             process.kill()
     except:
-        logging.debug("Couldn't kill process %s", process.pid)
+        pass
 
 
 def killSubprocesses(pid=None):
     pid = pid or os.getpid()
     process = psutil.Process(pid)
-    children = process.children(recursive=True)
+    if hasattr(process, 'children'):
+        children = process.children(recursive=True)
+    else:
+        children = process.get_children(recursive=True)
     if children:
-        logging.debug("Killing children...")
         for son in children:
             _safelyKillProcess(son)
     stopingAllParamikoThreads()
-    logging.debug("Done killing children.")
 
 
 # WORKAROUND to close all open paramiko threads
