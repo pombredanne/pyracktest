@@ -13,6 +13,7 @@ from strato.racktest.infra import logbeamfromlocalhost
 
 class RackAttackAllocation:
     _NO_PROGRESS_TIMEOUT = 5 * 60
+    OVERRIDE_ALLOCATION_POOL = 'OVERRIDE_ALLOCATION_POOL'
 
     def __init__(self, hosts, allocationID=None):
         self._hosts = hosts
@@ -46,6 +47,8 @@ class RackAttackAllocation:
             pool = None
             if "pool" in requirements:
                 pool = requirements["pool"]
+            if self.OVERRIDE_ALLOCATION_POOL in os.environ.keys():
+                pool = os.getenv(self.OVERRIDE_ALLOCATION_POOL)
             serverIDWildcard = requirements.get("serverIDWildcard", "")
             rootfs = rootfslabel.RootfsLabel(requirements['rootfs'], requirements.get('product', 'rootfs'))
             hardwareConstraints = dict(requirements)
